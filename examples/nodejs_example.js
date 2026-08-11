@@ -1,6 +1,7 @@
 const { spawn } = require('child_process');
 
-const snerd = spawn('cargo', ['run'], { cwd: '/Users/starq1/codingz/goProjz/snerd/snerdmq' });
+const path = require('path');
+const snerd = spawn('cargo', ['run'], { cwd: path.join(__dirname, '..') });
 
 snerd.stdout.on('data', (data) => {
     const lines = data.toString().split('\n').filter(Boolean);
