@@ -1,0 +1,49 @@
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(tag = "action")]
+pub enum IncomingMessage {
+    #[serde(rename = "register")]
+    Register {
+        task_type: String,
+    },
+    #[serde(rename = "enqueue")]
+    Enqueue {
+        task_id: String,
+        task_type: String,
+        task_data: String,
+        max_retries: i32,
+        retry_after_hours: f64,
+    },
+    #[serde(rename = "result")]
+    Result {
+        task_id: String,
+        status: String,
+        error_msg: Option<String>,
+    },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(tag = "action")]
+pub enum OutgoingMessage {
+    #[serde(rename = "execute")]
+    Execute {
+        task_id: String,
+        task_type: String,
+        task_data: String,
+    },
+    #[serde(rename = "max_retries_reached")]
+    MaxRetriesReached {
+        task_id: String,
+        task_type: String,
+        task_data: String,
+    },
+    #[serde(rename = "ack")]
+    Ack {
+        message: String,
+    },
+    #[serde(rename = "error")]
+    Error {
+        message: String,
+    },
+}
