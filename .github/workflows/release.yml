@@ -1,74 +1,72 @@
 name: Release
 
 on:
-  release:
-    types: [published]
-
-permissions:
-  contents: write
+  push:
+    tags:
+      - 'v*'
 
 jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          generate_release_notes: true
+
   build-and-upload:
-    name: Build & Upload to GitHub Releases
+    name: Build and Upload
     runs-on: ${{ matrix.os }}
+    needs: create-release
     strategy:
       matrix:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            name: snerdmq-linux-x64
+            file: snerdmq-linux-x64
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            name: snerdmq-linux-arm64
+            file: snerdmq-linux-arm64
           - os: macos-latest
             target: x86_64-apple-darwin
-            name: snerdmq-macos-x64
+            file: snerdmq-macos-x64
           - os: macos-latest
             target: aarch64-apple-darwin
-            name: snerdmq-macos-arm64
+            file: snerdmq-macos-arm64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            name: snerdmq-windows-x64.exe
+            file: snerdmq-windows-x64.exe
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            file: snerdmq-windows-arm64.exe
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      
+      - name: Install cross-compilation tools
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install cross-compilation dependencies (Linux ARM64)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
-
-      - name: Build Target
+      - name: Build binary
         run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Rename Binary (Unix)
-        if: matrix.os != 'windows-latest'
-        run: mv target/${{ matrix.target }}/release/snerdmq target/${{ matrix.target }}/release/${{ matrix.name }}
-
-      - name: Rename Binary (Windows)
-        if: matrix.os == 'windows-latest'
-        run: mv target/${{ matrix.target }}/release/snerdmq.exe target/${{ matrix.target }}/release/${{ matrix.name }}
-
-      - name: Upload Release Asset
-        uses: softprops/action-gh-release@v2
-        with:
-          files: target/${{ matrix.target }}/release/${{ matrix.name }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-  publish-crates-io:
-    name: Publish to Crates.io
-    runs-on: ubuntu-latest
-    needs: [build-and-upload]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Cargo Publish
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+
+      - name: Rename binary (Unix)
+        if: matrix.os != 'windows-latest'
+        run: mv target/${{ matrix.target }}/release/snerdmq target/${{ matrix.target }}/release/${{ matrix.file }}
+
+      - name: Rename binary (Windows)
+        if: matrix.os == 'windows-latest'
+        run: mv target/${{ matrix.target }}/release/snerdmq.exe target/${{ matrix.target }}/release/${{ matrix.file }}
+
+      - name: Upload binaries to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: target/${{ matrix.target }}/release/${{ matrix.file }}
