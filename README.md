@@ -75,6 +75,6 @@ While you can communicate with `snerdmq` manually via standard I/O, official Thi
 - [x] [Node.js / TypeScript (snerdmq-node)](https://www.npmjs.com/package/snerdmq-node)
 - [x] [Python (snerdmq-python)](https://pypi.org/project/snerdmq-python/)
 - [x] [Go (snerdmq-go)](https://pkg.go.dev/github.com/greyhands2/snerdmq-go)
-- [ ] Ruby
+- [x] [Ruby (snerdmq-ruby)](https://rubygems.org/gems/snerdmq)
 
 *Built with ❤️ for John Wick tier engineering.*
