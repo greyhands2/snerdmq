@@ -70,9 +70,9 @@ To scale horizontally across multiple isolated servers, simply mount a **Shared 
 
 Thanks to our native OS file locking (`flock`), if two servers try to enqueue or execute a task at the exact same millisecond, the Operating System will perfectly synchronize the lock, guaranteeing zero data corruption across your cluster!
 
-## 🔧 Language SDKs (Coming Soon)
+## 🔧 Language SDKs
 While you can communicate with `snerdmq` manually via standard I/O, official Thin Client SDKs are actively being developed for:
-- [ ] Node.js / TypeScript
+- [x] [Node.js / TypeScript (snerdmq-node)](https://www.npmjs.com/package/snerdmq-node)
 - [ ] Python
 - [ ] Go
 
