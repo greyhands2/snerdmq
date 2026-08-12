@@ -74,6 +74,7 @@ Thanks to our native OS file locking (`flock`), if two servers try to enqueue or
 While you can communicate with `snerdmq` manually via standard I/O, official Thin Client SDKs are actively being developed for:
 - [x] [Node.js / TypeScript (snerdmq-node)](https://www.npmjs.com/package/snerdmq-node)
 - [x] [Python (snerdmq-python)](https://pypi.org/project/snerdmq-python/)
-- [ ] Go
+- [x] [Go (snerdmq-go)](https://pkg.go.dev/github.com/greyhands2/snerdmq-go)
+- [ ] Ruby
 
 *Built with ❤️ for John Wick tier engineering.*
