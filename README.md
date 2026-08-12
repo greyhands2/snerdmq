@@ -77,7 +77,7 @@ While you can communicate with `snerdmq` manually via standard I/O, official Thi
 - [x] [Go (snerdmq-go)](https://pkg.go.dev/github.com/greyhands2/snerdmq-go)
 - [x] [Ruby (snerdmq-ruby)](https://rubygems.org/gems/snerdmq)
 - [x] [PHP (snerdmq-php)](https://packagist.org/packages/greyhands2/snerdmq)
-- [ ] Java / Kotlin
+- [x] [Java / Kotlin (snerdmq-java)](https://central.sonatype.com/artifact/io.github.greyhands2/snerdmq)
 - [ ] C# / .NET
 
 *Built with ❤️ for John Wick tier engineering.*
