@@ -4,9 +4,7 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "action")]
 pub enum IncomingMessage {
     #[serde(rename = "register")]
-    Register {
-        task_type: String,
-    },
+    Register { task_type: String },
     #[serde(rename = "enqueue")]
     Enqueue {
         task_id: String,
@@ -39,11 +37,7 @@ pub enum OutgoingMessage {
         task_data: String,
     },
     #[serde(rename = "ack")]
-    Ack {
-        message: String,
-    },
+    Ack { message: String },
     #[serde(rename = "error")]
-    Error {
-        message: String,
-    },
+    Error { message: String },
 }

@@ -10,8 +10,12 @@ use crate::task::RetryableTask;
 use std::future::Future;
 use std::pin::Pin;
 
-pub type TaskHandler = Arc<dyn Fn(RetryableTask) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>> + Send + Sync>;
-pub type MaxRetryHandler = Arc<dyn Fn(RetryableTask) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>> + Send + Sync>;
+pub type TaskHandler = Arc<
+    dyn Fn(RetryableTask) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>> + Send + Sync,
+>;
+pub type MaxRetryHandler = Arc<
+    dyn Fn(RetryableTask) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>> + Send + Sync,
+>;
 
 #[derive(Clone)]
 pub struct SnerdQueue {
@@ -36,10 +40,10 @@ impl SnerdQueue {
         F: Fn(RetryableTask) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Result<(), String>> + Send + 'static,
     {
-        self.task_handlers
-            .write()
-            .await
-            .insert(task_type.to_string(), Arc::new(move |task| Box::pin(handler(task))));
+        self.task_handlers.write().await.insert(
+            task_type.to_string(),
+            Arc::new(move |task| Box::pin(handler(task))),
+        );
     }
 
     pub async fn register_max_retry_handler<F, Fut>(&self, task_type: &str, handler: F)
@@ -47,10 +51,10 @@ impl SnerdQueue {
         F: Fn(RetryableTask) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Result<(), String>> + Send + 'static,
     {
-        self.max_retry_handlers
-            .write()
-            .await
-            .insert(task_type.to_string(), Arc::new(move |task| Box::pin(handler(task))));
+        self.max_retry_handlers.write().await.insert(
+            task_type.to_string(),
+            Arc::new(move |task| Box::pin(handler(task))),
+        );
     }
 
     pub fn enqueue(&self, mut task: RetryableTask) -> std::io::Result<()> {
