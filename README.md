@@ -59,7 +59,7 @@ Thanks to our native OS file locking (`flock`), if two servers try to enqueue or
 
 ---
 
-## 🐳 Docker & Containerization (ECS / Fargate)
+## 🐳 Docker & Cloud Deployments (ECS / K8s / Droplets)
 
 Because `snerdmq` runs directly over standard I/O pipes rather than TCP, you do **not** deploy it as a standalone microservice container! Instead, you package the ultra-lightweight daemon binary directly inside your main application's Docker image:
 
@@ -74,7 +74,11 @@ COPY --from=greyhands2/snerdmq-release /bin/snerdmq /usr/local/bin/snerdmq
 CMD ["node", "app.js"]
 ```
 
-When deploying to auto-scaling environments like AWS ECS or Fargate, just mount an **Amazon EFS** (or equivalent shared volume) to your containers and point SnerdMQ to it. The native POSIX file-locking handles all the cross-container cluster synchronization perfectly.
+**Single-Node (DigitalOcean Droplets / EC2):** 
+If you are running a single container on a VPS, SnerdMQ will simply write to the container's local SSD. You get insane sub-millisecond performance with zero configuration.
+
+**Multi-Node Auto-Scaling (AWS ECS / Kubernetes / Fargate):**
+When scaling horizontally across a cluster, just mount an **Amazon EFS** (or any NFS/Shared Volume) to your containers and point SnerdMQ to it. The native POSIX file-locking handles all cross-container cluster synchronization perfectly—no Redis cluster required!
 
 ---
 
