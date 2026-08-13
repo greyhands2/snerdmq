@@ -59,6 +59,25 @@ Thanks to our native OS file locking (`flock`), if two servers try to enqueue or
 
 ---
 
+## 🐳 Docker & Containerization (ECS / Fargate)
+
+Because `snerdmq` runs directly over standard I/O pipes rather than TCP, you do **not** deploy it as a standalone microservice container! Instead, you package the ultra-lightweight daemon binary directly inside your main application's Docker image:
+
+```dockerfile
+# Your standard application image
+FROM node:20-alpine
+
+# Simply copy the SnerdMQ binary into your application container
+COPY --from=greyhands2/snerdmq-release /bin/snerdmq /usr/local/bin/snerdmq
+
+# Your application's SDK will automatically spawn the daemon internally!
+CMD ["node", "app.js"]
+```
+
+When deploying to auto-scaling environments like AWS ECS or Fargate, just mount an **Amazon EFS** (or equivalent shared volume) to your containers and point SnerdMQ to it. The native POSIX file-locking handles all the cross-container cluster synchronization perfectly.
+
+---
+
 ## 🏗 Ecosystem: Embedded vs Sidecar
 
 Depending on your language, the SnerdMQ ecosystem offers two distinct ways to run background jobs.
