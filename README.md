@@ -38,7 +38,7 @@ Traditional message brokers (Kafka, Redis, RabbitMQ) force you to manage externa
 **SnerdMQ eliminates the network entirely.** It runs as a lightweight child process attached directly to your application container, communicating via 0-latency STDIN/STDOUT pipes.
 
 <div align="center">
-  <video src="./assets/architecture.mov" autoplay loop muted playsinline width="100%"></video>
+  <img src="./assets/architecture.gif" alt="SnerdMQ Architecture (Zero Networking)" />
   <br/>
   <i>Zero-latency embedded queue orchestration via standard I/O</i>
 </div>
