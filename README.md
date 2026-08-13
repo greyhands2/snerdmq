@@ -8,7 +8,7 @@
 
 </div>
 
-`snerdmq` is a specialized, embedded sidecar daemon that handles all the complex logic of background job queues (polling, file locking, retries, dead-letter queues) in highly-optimized Rust, while letting you write the actual execution logic in **Node.js, Python, Go, or Java**.
+`snerdmq` is a specialized, embedded sidecar daemon that handles all the complex logic of background job queues (polling, file locking, retries, dead-letter queues) in highly-optimized Rust, while letting you write the actual execution logic natively in **Node.js, Python, Go, Ruby, PHP, Java, or C#**.
 
 It runs as a child process and communicates via incredibly simple JSON over standard I/O pipes.
 
@@ -33,27 +33,32 @@ Simply download the appropriate binary for your OS from the [GitHub Releases](ht
 
 ## ⚡ How it Works (The Architecture)
 
-`snerdmq` runs alongside your application as a child process. You communicate with it by piping newline-delimited JSON strings into its `stdin` and reading its `stdout`.
+Traditional message brokers (Kafka, Redis, RabbitMQ) force you to manage external servers, configure complex networking, and suffer from TCP latency on every single job execution. 
+
+**SnerdMQ eliminates the network entirely.** It runs as a lightweight child process attached directly to your application container, communicating via 0-latency STDIN/STDOUT pipes.
 
 ```mermaid
-sequenceDiagram
-    participant App as NodeJS / Python App
-    participant Snerd as SnerdMQ Daemon
-    
-    App->>Snerd: Spawn Child Process (spawn('./snerdmq'))
-    App->>Snerd: Write to stdin: {"action": "register", "task_type": "send_email"}
-    Snerd-->>App: Read stdout: {"action": "ack", "message": "Registered"}
-    
-    Note over App,Snerd: Later in your code...
-    App->>Snerd: Write to stdin: {"action": "enqueue", "task_type": "send_email", "task_data": "{...}"}
-    Snerd-->>App: Read stdout: {"action": "ack", "message": "Enqueued"}
-    
-    Note over Snerd: SnerdMQ Engine polls and safely locks the filesystem
-    Snerd-->>App: Read stdout: {"action": "execute", "task_id": "123", ...}
-    
-    Note over App: App executes the email logic natively
-    App->>Snerd: Write to stdin: {"action": "result", "task_id": "123", "status": "success"}
-    Note over Snerd: SnerdMQ safely deletes the task
+flowchart TB
+    subgraph Traditional["❌ Traditional Message Brokers (Redis / Kafka)"]
+        direction LR
+        App1[App Server 1] -- TCP/IP --> LoadBalancer
+        App2[App Server 2] -- TCP/IP --> LoadBalancer
+        LoadBalancer --> BrokerCluster[(Kafka / Redis Cluster)]
+    end
+
+    subgraph SnerdMQ_Arc["✅ The SnerdMQ Architecture (Zero Networking)"]
+        direction LR
+        subgraph Machine1["App Server 1 (e.g. K8s Pod)"]
+            AppNode1[NodeJS/Python App] <-->|Stdio Pipes| Daemon1[SnerdMQ Daemon]
+        end
+
+        subgraph Machine2["App Server 2 (e.g. K8s Pod)"]
+            AppNode2[NodeJS/Python App] <-->|Stdio Pipes| Daemon2[SnerdMQ Daemon]
+        end
+
+        Daemon1 -->|fs3 File Lock| NFS[(NFS / AWS EFS Shared Drive)]
+        Daemon2 -->|fs3 File Lock| NFS
+    end
 ```
 
 ## 🌍 Distributed Scaling (Kubernetes / EC2)
@@ -70,14 +75,30 @@ To scale horizontally across multiple isolated servers, simply mount a **Shared 
 
 Thanks to our native OS file locking (`flock`), if two servers try to enqueue or execute a task at the exact same millisecond, the Operating System will perfectly synchronize the lock, guaranteeing zero data corruption across your cluster!
 
-## 🔧 Language SDKs
-While you can communicate with `snerdmq` manually via standard I/O, official Thin Client SDKs are actively being developed for:
+---
+
+## 🏗 Ecosystem: Embedded vs Sidecar
+
+Depending on your language, the SnerdMQ ecosystem offers two distinct ways to run background jobs.
+
+### For Rust Developers
+- Use [**`snerd-rust`**](https://github.com/greyhands2/snerd-rust): This is the **Embedded Library**. Best for pure Rust microservices that want to compile the queue directly into their binary for a zero-dependency, single-file deployment.
+- Use [**`snerdmq`**](https://github.com/greyhands2/snerdmq): This is the **Sidecar Daemon**. Best for polyglot systems, or when developers want strict process isolation (so an application crash/panic doesn't kill the queue orchestrator).
+
+### For Go Developers
+- Use [**`snerd-go`**](https://github.com/greyhands2/snerd-go): This is the **Embedded Library**. Best for pure Go applications that want native Goroutine orchestration without needing to bundle or download a pre-compiled Rust binary.
+- Use [**`snerdmq-go`**](https://github.com/greyhands2/snerdmq-go): This is the **Thin Client SDK**. Best for Go apps running in a polyglot microservices cluster where all microservices (Node, Python, Go) need to share the exact same queue storage format and Rust-powered `fs3` file-locking engine.
+
+---
+
+## 🔧 Language SDKs (Thin Clients)
+To communicate with the `snerdmq` daemon effortlessly, use our official Thin Client SDKs:
 - [x] [Node.js / TypeScript (snerdmq-node)](https://www.npmjs.com/package/snerdmq-node)
 - [x] [Python (snerdmq-python)](https://pypi.org/project/snerdmq-python/)
 - [x] [Go (snerdmq-go)](https://pkg.go.dev/github.com/greyhands2/snerdmq-go)
 - [x] [Ruby (snerdmq-ruby)](https://rubygems.org/gems/snerdmq)
 - [x] [PHP (snerdmq-php)](https://packagist.org/packages/greyhands2/snerdmq)
 - [x] [Java / Kotlin (snerdmq-java)](https://central.sonatype.com/artifact/io.github.greyhands2/snerdmq)
-- [ ] C# / .NET
+- [x] [C# / .NET (snerdmq-dotnet)](https://www.nuget.org/packages/SnerdMQ)
 
 *Built with ❤️ for John Wick tier engineering.*
