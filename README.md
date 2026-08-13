@@ -37,27 +37,11 @@ Traditional message brokers (Kafka, Redis, RabbitMQ) force you to manage externa
 
 **SnerdMQ eliminates the network entirely.** It runs as a lightweight child process attached directly to your application container, communicating via 0-latency STDIN/STDOUT pipes.
 
-```mermaid
-flowchart TB
-    subgraph Traditional["❌ Traditional Message Brokers (Redis / Kafka)"]
-        App1[App Server 1] -- TCP/IP --> LoadBalancer
-        App2[App Server 2] -- TCP/IP --> LoadBalancer
-        LoadBalancer --> BrokerCluster[(Kafka / Redis Cluster)]
-    end
-
-    subgraph SnerdMQ_Arc["✅ The SnerdMQ Architecture (Zero Networking)"]
-        subgraph Machine1["App Server 1 (e.g. K8s Pod)"]
-            AppNode1[NodeJS/Python App] <-->|Stdio Pipes| Daemon1[SnerdMQ Daemon]
-        end
-
-        subgraph Machine2["App Server 2 (e.g. K8s Pod)"]
-            AppNode2[NodeJS/Python App] <-->|Stdio Pipes| Daemon2[SnerdMQ Daemon]
-        end
-
-        Daemon1 -->|fs3 File Lock| NFS[(NFS / AWS EFS Shared Drive)]
-        Daemon2 -->|fs3 File Lock| NFS
-    end
-```
+<div align="center">
+  <img src="./assets/architecture.gif" alt="SnerdMQ Architecture (Zero Networking)" />
+  <br/>
+  <i>Zero-latency embedded queue orchestration via standard I/O</i>
+</div>
 
 ## 🌍 Distributed Scaling (Kubernetes / EC2)
 

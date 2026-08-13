@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SnerdMQ Architecture</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+
+        :root {
+            --bg: #09090b;
+            --pod-bg: rgba(255, 255, 255, 0.03);
+            --pod-border: rgba(255, 255, 255, 0.08);
+            
+            --app-color: #38bdf8;
+            --app-glow: rgba(56, 189, 248, 0.2);
+            
+            --rust-color: #f97316;
+            --rust-glow: rgba(249, 115, 22, 0.2);
+            
+            --nfs-color: #10b981;
+            --nfs-glow: rgba(16, 185, 129, 0.2);
+            
+            --local-color: #8b5cf6;
+            --local-glow: rgba(139, 92, 246, 0.2);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg);
+            background-image: radial-gradient(circle at 50% 0%, rgba(56,189,248,0.05) 0%, transparent 80%);
+            color: #ffffff;
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 30px;
+            padding-bottom: 10px;
+            overflow-x: hidden;
+            zoom: 0.65;
+        }
+
+        h1 {
+            font-weight: 900;
+            font-size: 26px;
+            letter-spacing: -1px;
+            margin: 0 0 8px 0;
+            background: linear-gradient(90deg, #fff, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        p.subtitle {
+            color: #94a3b8;
+            font-size: 12px;
+            margin-bottom: 30px;
+            font-weight: 500;
+        }
+
+        .architecture-grid {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 1100px;
+            position: relative;
+        }
+
+        .section-header {
+            font-size: 16px;
+            font-weight: 800;
+            color: #e2e8f0;
+            margin-bottom: 30px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid rgba(255,255,255,0.1);
+            width: 100%;
+            text-align: center;
+            letter-spacing: -0.5px;
+        }
+
+        .section-header span {
+            color: #64748b;
+            font-weight: 500;
+            font-size: 11px;
+            margin-left: 8px;
+        }
+
+        /* Load Balancer */
+        .lb {
+            width: 360px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--pod-border);
+            border-radius: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: 700;
+            font-size: 12px;
+            color: #cbd5e1;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+            z-index: 10;
+            margin-bottom: 45px;
+        }
+
+        /* Pods Row */
+        .pods-row {
+            display: flex;
+            gap: 80px;
+            position: relative;
+            z-index: 10;
+        }
+
+        .pod {
+            width: 420px; 
+            background: var(--pod-bg);
+            border: 1px solid var(--pod-border);
+            border-radius: 12px;
+            padding: 18px 22px;
+            box-sizing: border-box;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 15px 30px rgba(0,0,0,0.4);
+            position: relative;
+            margin-bottom: 45px;
+        }
+
+        .pod-title {
+            font-size: 10px;
+            font-weight: 700;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .process-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+        }
+
+        .process {
+            width: 140px;
+            border-radius: 10px;
+            padding: 12px;
+            box-sizing: border-box;
+            position: relative;
+            z-index: 10;
+            transition: transform 0.2s ease;
+        }
+
+        .process:hover {
+            transform: translateY(-2px);
+        }
+
+        .process.app {
+            background: rgba(56, 189, 248, 0.05);
+            border: 1px solid var(--app-color);
+            box-shadow: inset 0 0 15px var(--app-glow);
+        }
+
+        .process.daemon {
+            background: rgba(249, 115, 22, 0.05);
+            border: 1px solid var(--rust-color);
+            box-shadow: inset 0 0 15px var(--rust-glow);
+        }
+
+        .process-header {
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .app .process-header { color: var(--app-color); }
+        .daemon .process-header { color: var(--rust-color); }
+
+        .feature-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            font-size: 9px;
+            color: #cbd5e1;
+            line-height: 1.5;
+        }
+
+        .feature-list li {
+            margin-bottom: 4px;
+            display: flex;
+            align-items: flex-start;
+            gap: 4px;
+        }
+
+        .feature-list li::before {
+            content: '•';
+            color: #64748b;
+        }
+
+        /* Stdio Pipe */
+        .stdio-pipe {
+            position: absolute;
+            top: 50%;
+            left: 140px;
+            width: 96px;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-50%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1;
+        }
+
+        .pipe-label {
+            position: absolute;
+            top: -18px;
+            font-size: 9px;
+            color: #cbd5e1;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+        }
+
+        /* JSON Payload Animation */
+        .json-packet {
+            position: absolute;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 8px;
+            background: #1e293b;
+            border: 1px solid #334155;
+            padding: 2px 4px;
+            border-radius: 4px;
+            color: var(--app-color);
+            box-shadow: 0 3px 8px rgba(0,0,0,0.5);
+            opacity: 0;
+            z-index: 20;
+        }
+
+        .packet-right { animation: moveRight 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+        .packet-left { 
+            animation: moveLeft 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; 
+            animation-delay: 1.25s; 
+            color: var(--rust-color);
+        }
+
+        @keyframes moveRight {
+            0% { left: 130px; top: 35%; opacity: 0; transform: scale(0.8); }
+            10% { opacity: 1; transform: scale(1); }
+            90% { opacity: 1; transform: scale(1); }
+            100% { left: 220px; top: 35%; opacity: 0; transform: scale(0.8); }
+        }
+
+        @keyframes moveLeft {
+            0% { left: 220px; top: 60%; opacity: 0; transform: scale(0.8); }
+            10% { opacity: 1; transform: scale(1); }
+            90% { opacity: 1; transform: scale(1); }
+            100% { left: 130px; top: 60%; opacity: 0; transform: scale(0.8); }
+        }
+
+        /* Storage Drives */
+        .storage-drive {
+            height: 80px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 30px;
+            box-sizing: border-box;
+            position: relative;
+            z-index: 10;
+        }
+
+        .drive-local {
+            width: 420px; /* matches single pod width */
+            background: rgba(139, 92, 246, 0.05);
+            border: 1px solid var(--local-color);
+            box-shadow: 0 15px 40px var(--local-glow);
+        }
+
+        .drive-nfs {
+            width: 920px; /* covers both pods perfectly (420 + 80 + 420) */
+            background: rgba(16, 185, 129, 0.05);
+            border: 1px solid var(--nfs-color);
+            box-shadow: 0 15px 40px var(--nfs-glow);
+        }
+
+        .storage-title {
+            font-size: 13px;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .drive-local .storage-title { color: var(--local-color); }
+        .drive-nfs .storage-title { color: var(--nfs-color); }
+
+        .storage-subtitle {
+            font-size: 9px;
+            font-weight: 500;
+            color: #94a3b8;
+            margin-top: 4px;
+        }
+
+        .storage-files {
+            display: flex;
+            gap: 12px;
+        }
+
+        .storage-file {
+            background: rgba(0,0,0,0.5);
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: #cbd5e1;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .drive-local .storage-file { border: 1px solid rgba(139, 92, 246, 0.3); }
+        .drive-nfs .storage-file { border: 1px solid rgba(16, 185, 129, 0.3); }
+
+        .storage-file span { color: #64748b; font-size: 7px; }
+
+        /* Lock Lines connecting Daemon to Storage */
+        .lock-line-container {
+            position: absolute;
+            top: -45px;
+            width: 2px;
+            height: 45px;
+            background: rgba(255,255,255,0.05);
+        }
+
+        /* Local lock line center of pod */
+        .lock-local { left: 50%; transform: translateX(-50%); }
+
+        /* NFS lock lines centered under each pod */
+        .lock-nfs-left { left: 210px; }
+        .lock-nfs-right { right: 210px; }
+
+        .lock-packet {
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            position: absolute;
+            left: -1px;
+            animation: fsLock 1.5s ease-in-out infinite alternate;
+        }
+
+        .packet-purple { background: var(--local-color); box-shadow: 0 0 8px var(--local-color); }
+        .packet-green { background: var(--nfs-color); box-shadow: 0 0 8px var(--nfs-color); }
+        .packet-red { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+
+        @keyframes fsLock {
+            0% { top: 0; opacity: 0.5; }
+            100% { top: 100%; opacity: 1; }
+        }
+
+        .lock-label {
+            position: absolute;
+            font-size: 9px;
+            color: #94a3b8;
+            font-family: 'JetBrains Mono', monospace;
+            white-space: nowrap;
+            background: var(--bg);
+            padding: 1px 4px;
+            border-radius: 3px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .lock-local .lock-label { left: 10px; top: 10px; }
+        .lock-nfs-left .lock-label { right: 10px; top: 15px; }
+        .lock-nfs-right .lock-label { left: 10px; top: 15px; }
+
+        /* Decorative network lines */
+        .net-line {
+            position: absolute;
+            width: 2px;
+            height: 45px;
+            background: rgba(255,255,255,0.05);
+            top: -45px;
+            z-index: 1;
+        }
+
+        .net-line.left { left: 210px; }
+        .net-line.right { right: 210px; }
+
+        .net-packet {
+            width: 4px;
+            height: 15px;
+            background: #cbd5e1;
+            position: absolute;
+            left: -1px;
+            animation: netFlow 1s linear infinite;
+        }
+
+        @keyframes netFlow {
+            0% { top: -15px; opacity: 0;}
+            50% { opacity: 1; }
+            100% { top: 45px; opacity: 0; }
+        }
+
+    </style>
+</head>
+<body>
+
+    <h1>SnerdMQ Architecture</h1>
+    <p class="subtitle">Zero-latency embedded queue orchestration via standard I/O</p>
+
+    <!-- SECTION 1: Single Server -->
+    <div class="architecture-grid" style="margin-bottom: 50px;">
+        <div class="section-header">1. Single Server / Monolith <span>(Default Behavior)</span></div>
+        
+        <div style="display: flex; flex-direction: column; align-items: center; position: relative;">
+            <div class="pod">
+                <div class="pod-title">
+                    <span>Virtual Machine / App Server</span>
+                    <span style="color: #10b981;">● RUNNING</span>
+                </div>
+                
+                <div class="process-container">
+                    <div class="process app">
+                        <div class="process-header"><span style="font-size: 14px;">💻</span> Host App</div>
+                        <ul class="feature-list">
+                            <li>Business Logic</li>
+                            <li>API Handlers</li>
+                            <li>SnerdMQ SDK</li>
+                        </ul>
+                    </div>
+
+                    <div class="stdio-pipe">
+                        <div class="pipe-label">STDIO IPC</div>
+                    </div>
+                    <div class="json-packet packet-right">{"enqueue":...}</div>
+                    <div class="json-packet packet-left">{"execute":...}</div>
+
+                    <div class="process daemon">
+                        <div class="process-header"><span style="font-size: 14px;">🦀</span> SnerdMQ</div>
+                        <ul class="feature-list">
+                            <li>Event Loop (Tokio)</li>
+                            <li>fs3 File Locker</li>
+                            <li>Dead Letter Queue</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Local Storage -->
+            <div style="position: relative;">
+                <div class="lock-line-container lock-local">
+                    <div class="lock-label">flock(EX)</div>
+                    <div class="lock-packet packet-purple"></div>
+                </div>
+                
+                <div class="storage-drive drive-local">
+                    <div class="storage-title">
+                        <span style="font-size: 20px;">💾</span> 
+                        <div>
+                            Local Storage
+                            <div class="storage-subtitle">.snerdata/ (Native OS File Lock)</div>
+                        </div>
+                    </div>
+                    <div class="storage-files">
+                        <div class="storage-file">
+                            <span>DATA</span>tasks.log
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- SECTION 2: Multi-Server -->
+    <div class="architecture-grid">
+        <div class="section-header">2. Multi-Server / Distributed Cluster <span>(Kubernetes / Load Balanced)</span></div>
+
+        <div class="lb">🌐 Cloud Load Balancer / API Gateway</div>
+
+        <div class="pods-row">
+            <!-- Network lines from LB -->
+            <div class="net-line left"><div class="net-packet"></div></div>
+
+            <!-- Pod 1 -->
+            <div class="pod">
+                <div class="pod-title">
+                    <span>K8s Pod / App Server 1</span>
+                    <span style="color: #10b981;">● RUNNING</span>
+                </div>
+                
+                <div class="process-container">
+                    <div class="process app">
+                        <div class="process-header"><span style="font-size: 14px;">💻</span> Host App</div>
+                        <ul class="feature-list">
+                            <li>Business Logic</li>
+                            <li>API Handlers</li>
+                            <li>SnerdMQ SDK</li>
+                        </ul>
+                    </div>
+
+                    <div class="stdio-pipe">
+                        <div class="pipe-label">STDIO IPC</div>
+                    </div>
+                    <div class="json-packet packet-right">{"enqueue":...}</div>
+                    <div class="json-packet packet-left">{"execute":...}</div>
+
+                    <div class="process daemon">
+                        <div class="process-header"><span style="font-size: 14px;">🦀</span> SnerdMQ</div>
+                        <ul class="feature-list">
+                            <li>Event Loop (Tokio)</li>
+                            <li>fs3 File Locker</li>
+                            <li>Dead Letter Queue</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Network lines from LB -->
+            <div class="net-line right"><div class="net-packet" style="animation-delay: 0.5s;"></div></div>
+
+            <!-- Pod 2 -->
+            <div class="pod">
+                <div class="pod-title">
+                    <span>K8s Pod / App Server 2</span>
+                    <span style="color: #10b981;">● RUNNING</span>
+                </div>
+                
+                <div class="process-container">
+                    <div class="process app">
+                        <div class="process-header"><span style="font-size: 14px;">💻</span> Host App</div>
+                        <ul class="feature-list">
+                            <li>Business Logic</li>
+                            <li>API Handlers</li>
+                            <li>SnerdMQ SDK</li>
+                        </ul>
+                    </div>
+
+                    <div class="stdio-pipe">
+                        <div class="pipe-label">STDIO IPC</div>
+                    </div>
+                    <div class="json-packet packet-right" style="animation-delay: 0.7s;">{"enqueue":...}</div>
+                    <div class="json-packet packet-left" style="animation-delay: 1.3s;">{"execute":...}</div>
+
+                    <div class="process daemon">
+                        <div class="process-header"><span style="font-size: 14px;">🦀</span> SnerdMQ</div>
+                        <ul class="feature-list">
+                            <li>Event Loop (Tokio)</li>
+                            <li>fs3 File Locker</li>
+                            <li>Dead Letter Queue</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Shared File System -->
+        <div style="position: relative; width: 100%; display: flex; justify-content: center;">
+            
+            <div class="lock-line-container lock-nfs-left">
+                <div class="lock-label">flock(EX)</div>
+                <div class="lock-packet packet-green"></div>
+            </div>
+
+            <div class="lock-line-container lock-nfs-right">
+                <div class="lock-label">WAITING...</div>
+                <div class="lock-packet packet-red" style="animation-delay: 0.8s;"></div>
+            </div>
+
+            <div class="storage-drive drive-nfs">
+                <div class="storage-title">
+                    <span style="font-size: 24px;">🗄️</span> 
+                    <div>
+                        AWS EFS / Network Storage
+                        <div class="storage-subtitle">Shared POSIX Mount (Auto-Syncs Locks)</div>
+                    </div>
+                </div>
+                <div class="storage-files">
+                    <div class="storage-file">
+                        <span>DATA FILE</span>tasks.log
+                    </div>
+                    <div class="storage-file">
+                        <span>LOCK DIR</span>locks/
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</body>
+</html>
