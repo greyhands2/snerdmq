@@ -40,14 +40,12 @@ Traditional message brokers (Kafka, Redis, RabbitMQ) force you to manage externa
 ```mermaid
 flowchart TB
     subgraph Traditional["❌ Traditional Message Brokers (Redis / Kafka)"]
-        direction LR
         App1[App Server 1] -- TCP/IP --> LoadBalancer
         App2[App Server 2] -- TCP/IP --> LoadBalancer
         LoadBalancer --> BrokerCluster[(Kafka / Redis Cluster)]
     end
 
     subgraph SnerdMQ_Arc["✅ The SnerdMQ Architecture (Zero Networking)"]
-        direction LR
         subgraph Machine1["App Server 1 (e.g. K8s Pod)"]
             AppNode1[NodeJS/Python App] <-->|Stdio Pipes| Daemon1[SnerdMQ Daemon]
         end
