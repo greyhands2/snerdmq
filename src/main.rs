@@ -1,6 +1,7 @@
 pub mod file_store;
 pub mod protocol;
 pub mod queue;
+pub mod rate_limiter;
 pub mod task;
 
 use std::collections::HashMap;
@@ -10,6 +11,7 @@ use tokio::io::{AsyncBufReadExt, BufReader, stdin};
 use tokio::sync::{RwLock, oneshot};
 
 use crate::file_store::FileStore;
+use crate::rate_limiter::RateLimiter;
 type PendingExecutions = Arc<RwLock<HashMap<String, oneshot::Sender<Result<(), String>>>>>;
 use crate::protocol::{IncomingMessage, OutgoingMessage};
 use crate::queue::SnerdQueue;
@@ -17,19 +19,16 @@ use crate::task::RetryableTask;
 
 #[tokio::main]
 async fn main() {
-    // 1. Initialize File Store & Queue
-    // Allow users to pass a custom path via command line args (e.g. ./snerdmq /shared-drive/tasks.log)
-    let store_path = std::env::args()
+    let store_path_str = std::env::args()
         .nth(1)
         .unwrap_or_else(|| ".snerdata/tasks/tasks.log".to_string());
+    let store_path = std::path::PathBuf::from(&store_path_str);
     let file_store = FileStore::new(&store_path).unwrap();
-    let queue = Arc::new(SnerdQueue::new("snerdmq-daemon", file_store));
+    let rate_limiter = RateLimiter::new(&store_path);
+    let queue = Arc::new(SnerdQueue::new("snerdmq-daemon", file_store, rate_limiter));
     queue.start_processor(Duration::from_secs(2)).await;
 
-    // 2. Map of Pending Executions (task_id -> Oneshot Sender)
     let pending_executions: PendingExecutions = Arc::new(RwLock::new(HashMap::new()));
-
-    // 3. Stdin Reader Loop
     let stdin_stream = stdin();
     let mut reader = BufReader::new(stdin_stream).lines();
 
@@ -49,23 +48,15 @@ async fn main() {
                     .register_task_handler(&task_type, move |task: RetryableTask| {
                         let pending = pending_clone.clone();
                         let t_type = t_type.clone();
-
                         async move {
-                            // Create a oneshot channel to wait for the client's result
                             let (tx, rx) = oneshot::channel();
-
-                            // Store the sender in our pending map
                             pending.write().await.insert(task.task_id.clone(), tx);
-
-                            // Send the Execution Request to stdout (to the client)
                             let out_msg = OutgoingMessage::Execute {
                                 task_id: task.task_id.clone(),
                                 task_type: t_type,
                                 task_data: task.task_data.clone(),
                             };
                             println!("{}", serde_json::to_string(&out_msg).unwrap());
-
-                            // Wait for the client to send back the result over stdin!
                             match rx.await {
                                 Ok(res) => res,
                                 Err(_) => Err("Client disconnected before responding".to_string()),
@@ -74,7 +65,6 @@ async fn main() {
                     })
                     .await;
 
-                // Also register Max Retry (Dead Letter) handler
                 let t_type_dlq = task_type.clone();
                 queue
                     .register_max_retry_handler(&task_type, move |task: RetryableTask| {
@@ -91,7 +81,6 @@ async fn main() {
                     })
                     .await;
 
-                // Acknowledge registration
                 println!(
                     "{}",
                     serde_json::to_string(&OutgoingMessage::Ack {
@@ -107,6 +96,8 @@ async fn main() {
                 task_data,
                 max_retries,
                 retry_after_hours,
+                rate_limit_group,
+                max_per_minute,
             }) => {
                 let t = RetryableTask::new(
                     task_id,
@@ -114,6 +105,8 @@ async fn main() {
                     task_data,
                     max_retries,
                     retry_after_hours,
+                    rate_limit_group,
+                    max_per_minute,
                 );
                 if let Err(e) = queue.enqueue(t) {
                     println!(

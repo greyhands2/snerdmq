@@ -12,6 +12,10 @@ pub enum IncomingMessage {
         task_data: String,
         max_retries: i32,
         retry_after_hours: f64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        rate_limit_group: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        max_per_minute: Option<i32>,
     },
     #[serde(rename = "result")]
     Result {
