@@ -42,6 +42,15 @@ SnerdMQ expects simple JSON objects over STDIN. Here is exactly what an advanced
 
 *Note: You rarely have to write this JSON yourself! The official Thin Client SDKs handle all of this automatically.*
 
+
+### ⚙️ Advanced Task Configuration (v0.2.0)
+To power complex AI workflows, tasks can now be configured with advanced orchestration parameters:
+
+* **`auto_dedupe` (`bool`)**: If set to `true`, the daemon computes a cryptographic hash of the `task_type` and `task_data`. If an identical payload is currently sitting in the queue pending execution, this new task is silently dropped. Excellent for preventing duplicate generative AI requests from trigger-happy users!
+* **`urgency_score` (`float`)**: A value (e.g. `0.99`) used to bypass the standard FIFO queue. SnerdMQ uses a true Binary Max-Heap to continually float tasks with the highest urgency score to the very front of the execution line. Standard tasks default to `0.0`.
+* **`rate_limit_group` (`string`)**: A custom string (e.g. `"openai_api"` or `"db_writes"`) that groups tasks together for backpressure control.
+* **`max_per_minute` (`int`)**: Used in conjunction with `rate_limit_group`. If the queue processes more tasks in this group than the allowed limit within a 60-second rolling window, further tasks in this group are temporarily paused. This natively prevents 429 "Too Many Requests" errors when bursting third-party APIs.
+
 ## ⚡ Architecture (Zero Networking)
 
 <div align="center">
