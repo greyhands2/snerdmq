@@ -131,6 +131,11 @@ async fn main() {
                 }
             }
 
+            Ok(IncomingMessage::Progress { task_id, data }) => {
+                let out_msg = OutgoingMessage::Progress { task_id, data };
+                println!("{}", serde_json::to_string(&out_msg).unwrap());
+            }
+
             Ok(IncomingMessage::Result {
                 task_id,
                 status,

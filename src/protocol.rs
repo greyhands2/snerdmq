@@ -21,6 +21,11 @@ pub enum IncomingMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         urgency_score: Option<f64>,
     },
+    #[serde(rename = "progress")]
+    Progress {
+        task_id: String,
+        data: String,
+    },
     #[serde(rename = "result")]
     Result {
         task_id: String,
@@ -46,6 +51,11 @@ pub enum OutgoingMessage {
     },
     #[serde(rename = "ack")]
     Ack { #[serde(skip_serializing_if = "Option::is_none")] task_id: Option<String>, message: String },
+    #[serde(rename = "progress")]
+    Progress {
+        task_id: String,
+        data: String,
+    },
     #[serde(rename = "error")]
     Error { #[serde(skip_serializing_if = "Option::is_none")] task_id: Option<String>, message: String },
 }
