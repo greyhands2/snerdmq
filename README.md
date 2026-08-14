@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./assets/Designer-7.png" height="120" alt="SnerdMQ Logo" />
+  <img src="./assets/Designer-9.png" height="120" alt="SnerdMQ Logo" />
   <h1>SnerdMQ v0.2.0</h1>
   <p>The AI-Era polyglot background job queue daemon powered by Rust.</p>
 
@@ -101,6 +101,39 @@ Depending on your language, the SnerdMQ ecosystem offers two distinct ways to ru
 ### For Rust Developers
 - Use [**`snerd-rust`**](https://github.com/greyhands2/snerd-rust): This is the **Embedded Library**. Best for pure Rust microservices that want to compile the queue directly into their binary for a zero-dependency, single-file deployment.
 - Use [**`snerdmq`**](https://github.com/greyhands2/snerdmq): This is the **Sidecar Daemon**. Best for polyglot systems, or when developers want strict process isolation (so an application crash/panic doesn't kill the queue orchestrator).
+
+**Example: Calling the SnerdMQ Sidecar Daemon from Rust**
+If you are using the Sidecar daemon in Rust instead of the embedded library, you can spawn the daemon as a child process and pass JSON payloads instantly over standard I/O:
+
+```rust
+use std::process::{Command, Stdio};
+use std::io::Write;
+use serde_json::json;
+
+fn main() {
+    // Spawn the daemon
+    let mut child = Command::new("snerdmq")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("Failed to spawn SnerdMQ daemon");
+
+    // Write a task over STDIN using the JSON protocol
+    let mut stdin = child.stdin.take().expect("Failed to open stdin");
+    
+    let task = json!({
+        "action": "enqueue",
+        "task_type": "rust_heavy_compute",
+        "task_id": "rust_001",
+        "task_data": { "matrix_size": 1000 },
+        "auto_dedupe": true,
+        "urgency_score": 0.99
+    });
+
+    writeln!(stdin, "{}", task.to_string()).unwrap();
+}
+```
+
 
 ### For Go Developers
 - Use [**`snerd-go`**](https://github.com/greyhands2/snerd-go): This is the **Embedded Library**. Best for pure Go applications that want native Goroutine orchestration without needing to bundle or download a pre-compiled Rust binary.
