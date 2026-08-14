@@ -84,7 +84,7 @@ async fn main() {
                 println!(
                     "{}",
                     serde_json::to_string(&OutgoingMessage::Ack {
-                        message: format!("Registered handler for {}", task_type)
+                        task_id: None, message: format!("Registered handler for {}", task_type)
                     })
                     .unwrap()
                 );
@@ -101,7 +101,7 @@ async fn main() {
                 auto_dedupe,
             }) => {
                 let t = RetryableTask::new(
-                    task_id,
+                    task_id.clone(),
                     task_type.clone(),
                     task_data.clone(),
                     max_retries,
@@ -114,7 +114,7 @@ async fn main() {
                     println!(
                         "{}",
                         serde_json::to_string(&OutgoingMessage::Error {
-                            message: format!("Failed to enqueue: {}", e)
+                            task_id: Some(task_id.clone()), message: format!("Failed to enqueue: {}", e)
                         })
                         .unwrap()
                     );
@@ -122,7 +122,7 @@ async fn main() {
                     println!(
                         "{}",
                         serde_json::to_string(&OutgoingMessage::Ack {
-                            message: "Enqueued successfully".to_string()
+                            task_id: Some(task_id.clone()), message: "Enqueued successfully".to_string()
                         })
                         .unwrap()
                     );
@@ -144,8 +144,7 @@ async fn main() {
                 } else {
                     println!(
                         "{}",
-                        serde_json::to_string(&OutgoingMessage::Error {
-                            message: format!(
+                        serde_json::to_string(&OutgoingMessage::Error { task_id: None, message: format!(
                                 "Received result for unknown/expired task_id {}",
                                 task_id
                             )
@@ -158,8 +157,7 @@ async fn main() {
             Err(e) => {
                 println!(
                     "{}",
-                    serde_json::to_string(&OutgoingMessage::Error {
-                        message: format!("Invalid JSON: {}", e)
+                    serde_json::to_string(&OutgoingMessage::Error { task_id: None, message: format!("Invalid JSON: {}", e)
                     })
                     .unwrap()
                 );

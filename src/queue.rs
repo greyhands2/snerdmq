@@ -18,6 +18,19 @@ pub type MaxRetryHandler = Arc<
     dyn Fn(RetryableTask) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>> + Send + Sync,
 >;
 
+struct ExecutingGuard {
+    executing_tasks: Arc<Mutex<HashSet<String>>>,
+    task_id: String,
+}
+
+impl Drop for ExecutingGuard {
+    fn drop(&mut self) {
+        if let Ok(mut executing) = self.executing_tasks.lock() {
+            executing.remove(&self.task_id);
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct SnerdQueue {
     pub name: String,
@@ -26,6 +39,7 @@ pub struct SnerdQueue {
     task_handlers: Arc<RwLock<HashMap<String, TaskHandler>>>,
     max_retry_handlers: Arc<RwLock<HashMap<String, MaxRetryHandler>>>,
     active_hashes: Arc<Mutex<HashSet<String>>>,
+    executing_tasks: Arc<Mutex<HashSet<String>>>,
 }
 
 impl SnerdQueue {
@@ -48,6 +62,7 @@ impl SnerdQueue {
             task_handlers: Arc::new(RwLock::new(HashMap::new())),
             max_retry_handlers: Arc::new(RwLock::new(HashMap::new())),
             active_hashes: Arc::new(Mutex::new(initial_hashes)),
+            executing_tasks: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
@@ -99,6 +114,15 @@ impl SnerdQueue {
                     }
                 }
             }
+            
+            // Lock check before executing
+            if let Ok(mut executing) = self.executing_tasks.lock() {
+                if executing.contains(&task.task_id) {
+                    return Ok(());
+                }
+                executing.insert(task.task_id.clone());
+            }
+            
             let q = self.clone();
             tokio::spawn(async move {
                 q.execute_task(task).await;
@@ -140,6 +164,14 @@ impl SnerdQueue {
                     }
                 }
 
+                // Lock check before executing
+                if let Ok(mut executing) = self.executing_tasks.lock() {
+                    if executing.contains(&task.task_id) {
+                        continue;
+                    }
+                    executing.insert(task.task_id.clone());
+                }
+
                 let q = self.clone();
                 tokio::spawn(async move {
                     q.execute_task(task).await;
@@ -149,6 +181,12 @@ impl SnerdQueue {
     }
 
     async fn execute_task(&self, mut task: RetryableTask) {
+        // Drop guard guarantees removal from executing_tasks
+        let _guard = ExecutingGuard {
+            executing_tasks: Arc::clone(&self.executing_tasks),
+            task_id: task.task_id.clone(),
+        };
+
         let handler = {
             let handlers = self.task_handlers.read().await;
             handlers.get(&task.task_type).cloned()

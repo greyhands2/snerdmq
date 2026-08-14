@@ -1,10 +1,9 @@
-use fs3::FileExt;
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use crate::task::RetryableTask;
 
@@ -15,6 +14,8 @@ pub struct FileStore {
     deleted_tasks: Arc<Mutex<usize>>,
     append_count: Arc<Mutex<usize>>,
     compacting: Arc<AtomicBool>,
+    file_lock: Arc<RwLock<()>>,
+    tasks_cache: Arc<RwLock<HashMap<String, RetryableTask>>>,
 }
 
 impl FileStore {
@@ -25,18 +26,23 @@ impl FileStore {
             deleted_tasks: Arc::new(Mutex::new(0)),
             append_count: Arc::new(Mutex::new(0)),
             compacting: Arc::new(AtomicBool::new(false)),
+            file_lock: Arc::new(RwLock::new(())),
+            tasks_cache: Arc::new(RwLock::new(HashMap::new())),
         };
         fs.rebuild_metadata()?;
         Ok(fs)
     }
 
     fn rebuild_metadata(&self) -> std::io::Result<()> {
+        let _lock = self.file_lock.write().unwrap();
+        let mut cache = self.tasks_cache.write().unwrap();
+        cache.clear();
+
         if !self.file_path.exists() {
             return Ok(());
         }
 
         let file = File::open(self.file_path.as_ref())?;
-        file.lock_shared()?;
 
         let mut total = 0;
         let mut deleted = 0;
@@ -51,12 +57,13 @@ impl FileStore {
                 appended += 1;
                 if task.deleted_at.is_some() {
                     deleted += 1;
+                    cache.remove(&task.task_id);
                 } else {
                     total += 1;
+                    cache.insert(task.task_id.clone(), task);
                 }
             }
         }
-        file.unlock()?;
 
         *self.total_tasks.lock().unwrap() = total;
         *self.deleted_tasks.lock().unwrap() = deleted;
@@ -66,6 +73,8 @@ impl FileStore {
     }
 
     pub fn save_task(&self, task: &RetryableTask) -> std::io::Result<()> {
+        let _lock = self.file_lock.write().unwrap();
+
         if let Some(parent) = self.file_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -75,15 +84,21 @@ impl FileStore {
             .append(true)
             .open(self.file_path.as_ref())?;
 
-        file.lock_exclusive()?;
-
         let json_str = serde_json::to_string(task)?;
         writeln!(file, "{}", json_str)?;
         file.sync_all()?;
 
-        file.unlock()?;
-
         let is_deleted = task.deleted_at.is_some();
+        
+        {
+            let mut cache = self.tasks_cache.write().unwrap();
+            if is_deleted {
+                cache.remove(&task.task_id);
+            } else {
+                cache.insert(task.task_id.clone(), task.clone());
+            }
+        }
+
         {
             *self.append_count.lock().unwrap() += 1;
             if is_deleted {
@@ -104,65 +119,27 @@ impl FileStore {
     }
 
     pub fn read_tasks(&self) -> std::io::Result<Vec<RetryableTask>> {
-        if !self.file_path.exists() {
-            return Ok(vec![]);
-        }
-
-        let file = File::open(self.file_path.as_ref())?;
-        file.lock_shared()?;
-
-        let mut task_map = HashMap::new();
-        let reader = BufReader::new(&file);
-
-        for line_str in reader.lines().map_while(Result::ok) {
-            if line_str.trim().is_empty() {
-                continue;
-            }
-            if let Ok(task) = serde_json::from_str::<RetryableTask>(&line_str) {
-                if task.deleted_at.is_some() {
-                    task_map.remove(&task.task_id);
-                } else {
-                    task_map.insert(task.task_id.clone(), task);
-                }
-            }
-        }
-
-        file.unlock()?;
-
-        Ok(task_map.into_values().collect())
+        let cache = self.tasks_cache.read().unwrap();
+        Ok(cache.values().cloned().collect())
     }
 
     pub fn get_latest_task(&self, task_id: &str) -> std::io::Result<Option<RetryableTask>> {
-        if !self.file_path.exists() {
-            return Ok(None);
-        }
-
-        let file = File::open(self.file_path.as_ref())?;
-        file.lock_shared()?;
-
-        let mut latest = None;
-        let reader = BufReader::new(&file);
-
-        for line_str in reader.lines().map_while(Result::ok) {
-            if line_str.trim().is_empty() {
-                continue;
-            }
-            if let Ok(task) = serde_json::from_str::<RetryableTask>(&line_str)
-                && task.task_id == task_id
-            {
-                latest = Some(task);
-            }
-        }
-
-        file.unlock()?;
-
-        Ok(latest)
+        let cache = self.tasks_cache.read().unwrap();
+        Ok(cache.get(task_id).cloned())
     }
 
     pub fn delete_task(&self, task_id: &str) -> std::io::Result<()> {
-        if let Some(mut task) = self.get_latest_task(task_id)?
-            && task.deleted_at.is_none()
+        let mut task_opt = None;
         {
+            let cache = self.tasks_cache.read().unwrap();
+            if let Some(task) = cache.get(task_id) {
+                if task.deleted_at.is_none() {
+                    task_opt = Some(task.clone());
+                }
+            }
+        }
+        
+        if let Some(mut task) = task_opt {
             task.mark_deleted();
             self.save_task(&task)?;
         }
@@ -170,10 +147,10 @@ impl FileStore {
     }
 
     fn should_compact(&self) -> bool {
-        if let Ok(metadata) = std::fs::metadata(self.file_path.as_ref())
-            && metadata.len() > 20 * 1024 * 1024
-        {
-            return true;
+        if let Ok(metadata) = std::fs::metadata(self.file_path.as_ref()) {
+            if metadata.len() > 20 * 1024 * 1024 {
+                return true;
+            }
         }
 
         let total = *self.total_tasks.lock().unwrap();
@@ -201,8 +178,9 @@ impl FileStore {
         let temp_path = self.file_path.with_extension("tmp");
 
         let result = (|| -> std::io::Result<()> {
+            let _lock = self.file_lock.write().unwrap();
+            
             let input_file = File::open(self.file_path.as_ref())?;
-            input_file.lock_shared()?;
 
             let mut temp_file = OpenOptions::new()
                 .create(true)
@@ -241,13 +219,18 @@ impl FileStore {
             }
 
             temp_file.sync_all()?;
-            input_file.unlock()?;
-
             std::fs::rename(&temp_path, self.file_path.as_ref())?;
 
             *self.total_tasks.lock().unwrap() = task_map.len();
             *self.deleted_tasks.lock().unwrap() = 0;
             *self.append_count.lock().unwrap() = 0;
+
+            // Update memory cache
+            let mut cache = self.tasks_cache.write().unwrap();
+            cache.clear();
+            for (id, t) in task_map.into_iter() {
+                cache.insert(id, t);
+            }
 
             Ok(())
         })();
