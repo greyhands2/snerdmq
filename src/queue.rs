@@ -1,6 +1,6 @@
 use chrono::Utc;
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::RwLock;
 
@@ -25,16 +25,29 @@ pub struct SnerdQueue {
     pub rate_limiter: RateLimiter,
     task_handlers: Arc<RwLock<HashMap<String, TaskHandler>>>,
     max_retry_handlers: Arc<RwLock<HashMap<String, MaxRetryHandler>>>,
+    active_hashes: Arc<Mutex<HashSet<String>>>,
 }
 
 impl SnerdQueue {
     pub fn new(name: &str, file_store: FileStore, rate_limiter: RateLimiter) -> Self {
+        let mut initial_hashes = HashSet::new();
+        if let Ok(tasks) = file_store.read_tasks() {
+            for task in tasks {
+                if task.deleted_at.is_none() {
+                    if let Some(hash) = task.payload_hash {
+                        initial_hashes.insert(hash);
+                    }
+                }
+            }
+        }
+        
         Self {
             name: name.to_string(),
             file_store,
             rate_limiter,
             task_handlers: Arc::new(RwLock::new(HashMap::new())),
             max_retry_handlers: Arc::new(RwLock::new(HashMap::new())),
+            active_hashes: Arc::new(Mutex::new(initial_hashes)),
         }
     }
 
@@ -61,6 +74,15 @@ impl SnerdQueue {
     }
 
     pub fn enqueue(&self, mut task: RetryableTask) -> std::io::Result<()> {
+        if let Some(ref hash) = task.payload_hash {
+            if let Ok(mut hashes) = self.active_hashes.lock() {
+                if hashes.contains(hash) {
+                    // Duplicate found, drop silently
+                    return Ok(());
+                }
+                hashes.insert(hash.clone());
+            }
+        }
         task.deleted_at = None;
         self.file_store.save_task(&task)?;
 
@@ -138,6 +160,11 @@ impl SnerdQueue {
             match result {
                 Ok(_) => {
                     let _ = self.file_store.delete_task(&task.task_id);
+                    if let Some(ref hash) = task.payload_hash {
+                        if let Ok(mut hashes) = self.active_hashes.lock() {
+                            hashes.remove(hash);
+                        }
+                    }
                 }
                 Err(e) => {
                     if task.retry_count < task.max_retries {
@@ -155,6 +182,11 @@ impl SnerdQueue {
                         }
 
                         let _ = self.file_store.delete_task(&task.task_id);
+                        if let Some(ref hash) = task.payload_hash {
+                            if let Ok(mut hashes) = self.active_hashes.lock() {
+                                hashes.remove(hash);
+                            }
+                        }
                     }
                 }
             }

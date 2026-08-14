@@ -98,15 +98,17 @@ async fn main() {
                 retry_after_hours,
                 rate_limit_group,
                 max_per_minute,
+                auto_dedupe,
             }) => {
                 let t = RetryableTask::new(
                     task_id,
-                    task_type,
-                    task_data,
+                    task_type.clone(),
+                    task_data.clone(),
                     max_retries,
                     retry_after_hours,
                     rate_limit_group,
                     max_per_minute,
+                    auto_dedupe,
                 );
                 if let Err(e) = queue.enqueue(t) {
                     println!(

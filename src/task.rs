@@ -43,6 +43,12 @@ pub struct RetryableTask {
     #[serde(rename = "maxPerMinute", skip_serializing_if = "Option::is_none")]
     pub max_per_minute: Option<i32>,
 
+    #[serde(rename = "autoDedupe", skip_serializing_if = "Option::is_none")]
+    pub auto_dedupe: Option<bool>,
+
+    #[serde(rename = "payloadHash", skip_serializing_if = "Option::is_none")]
+    pub payload_hash: Option<String>,
+
     #[serde(rename = "deletedAt", skip_serializing_if = "Option::is_none")]
     pub deleted_at: Option<DateTime<Utc>>,
 
@@ -62,8 +68,17 @@ impl RetryableTask {
         retry_after_hours: f64,
         rate_limit_group: Option<String>,
         max_per_minute: Option<i32>,
+        auto_dedupe: Option<bool>,
     ) -> Self {
         let now = Utc::now();
+        let payload_hash = if auto_dedupe.unwrap_or(false) {
+            use xxhash_rust::xxh64::xxh64;
+            let combined = format!("{}{}", task_type, task_data);
+            Some(format!("{:x}", xxh64(combined.as_bytes(), 0)))
+        } else {
+            None
+        };
+        
         Self {
             task_id,
             task_type,
@@ -76,6 +91,8 @@ impl RetryableTask {
             last_job_error: None,
             rate_limit_group,
             max_per_minute,
+            auto_dedupe,
+            payload_hash,
             deleted_at: None,
             created_at: now,
             updated_at: now,

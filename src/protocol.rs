@@ -16,6 +16,8 @@ pub enum IncomingMessage {
         rate_limit_group: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         max_per_minute: Option<i32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        auto_dedupe: Option<bool>,
     },
     #[serde(rename = "result")]
     Result {
