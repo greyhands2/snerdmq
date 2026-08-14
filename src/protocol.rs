@@ -18,6 +18,8 @@ pub enum IncomingMessage {
         max_per_minute: Option<i32>,
         #[serde(skip_serializing_if = "Option::is_none")]
         auto_dedupe: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        urgency_score: Option<f64>,
     },
     #[serde(rename = "result")]
     Result {

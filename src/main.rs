@@ -99,6 +99,7 @@ async fn main() {
                 rate_limit_group,
                 max_per_minute,
                 auto_dedupe,
+                urgency_score,
             }) => {
                 let t = RetryableTask::new(
                     task_id.clone(),
@@ -109,6 +110,7 @@ async fn main() {
                     rate_limit_group,
                     max_per_minute,
                     auto_dedupe,
+                    urgency_score,
                 );
                 if let Err(e) = queue.enqueue(t) {
                     println!(
