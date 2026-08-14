@@ -19,10 +19,10 @@ use crate::task::RetryableTask;
 
 #[tokio::main]
 async fn main() {
-    let store_path_str = std::env::args()
+    let storage_dir_str = std::env::args()
         .nth(1)
-        .unwrap_or_else(|| ".snerdata/tasks/tasks.log".to_string());
-    let store_path = std::path::PathBuf::from(&store_path_str);
+        .unwrap_or_else(|| ".snerdata".to_string());
+    let store_path = std::path::PathBuf::from(&storage_dir_str).join("tasks").join("tasks.log");
     let file_store = FileStore::new(&store_path).unwrap();
     let rate_limiter = RateLimiter::new(&store_path);
     let queue = Arc::new(SnerdQueue::new("snerdmq-daemon", file_store, rate_limiter));
