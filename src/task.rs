@@ -37,6 +37,12 @@ pub struct RetryableTask {
     #[serde(rename = "LastJobError", skip_serializing_if = "Option::is_none")]
     pub last_job_error: Option<JobErrorReturn>,
 
+    #[serde(rename = "rateLimitGroup", skip_serializing_if = "Option::is_none")]
+    pub rate_limit_group: Option<String>,
+
+    #[serde(rename = "maxPerMinute", skip_serializing_if = "Option::is_none")]
+    pub max_per_minute: Option<i32>,
+
     #[serde(rename = "deletedAt", skip_serializing_if = "Option::is_none")]
     pub deleted_at: Option<DateTime<Utc>>,
 
@@ -54,6 +60,8 @@ impl RetryableTask {
         task_data: String,
         max_retries: i32,
         retry_after_hours: f64,
+        rate_limit_group: Option<String>,
+        max_per_minute: Option<i32>,
     ) -> Self {
         let now = Utc::now();
         Self {
@@ -66,6 +74,8 @@ impl RetryableTask {
             retry_after_time: now,
             last_error_obj: None,
             last_job_error: None,
+            rate_limit_group,
+            max_per_minute,
             deleted_at: None,
             created_at: now,
             updated_at: now,

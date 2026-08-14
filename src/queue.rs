@@ -6,6 +6,7 @@ use tokio::sync::RwLock;
 
 use crate::file_store::FileStore;
 use crate::task::RetryableTask;
+use crate::rate_limiter::RateLimiter;
 
 use std::future::Future;
 use std::pin::Pin;
@@ -21,15 +22,17 @@ pub type MaxRetryHandler = Arc<
 pub struct SnerdQueue {
     pub name: String,
     pub file_store: FileStore,
+    pub rate_limiter: RateLimiter,
     task_handlers: Arc<RwLock<HashMap<String, TaskHandler>>>,
     max_retry_handlers: Arc<RwLock<HashMap<String, MaxRetryHandler>>>,
 }
 
 impl SnerdQueue {
-    pub fn new(name: &str, file_store: FileStore) -> Self {
+    pub fn new(name: &str, file_store: FileStore, rate_limiter: RateLimiter) -> Self {
         Self {
             name: name.to_string(),
             file_store,
+            rate_limiter,
             task_handlers: Arc::new(RwLock::new(HashMap::new())),
             max_retry_handlers: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -62,6 +65,18 @@ impl SnerdQueue {
         self.file_store.save_task(&task)?;
 
         if task.retry_after_time <= Utc::now() {
+            if let Some(ref group) = task.rate_limit_group {
+                if let Some(limit) = task.max_per_minute {
+                    match self.rate_limiter.check_and_increment(group, limit) {
+                        Ok(true) => {}
+                        Ok(false) | Err(_) => {
+                            task.retry_after_time = Utc::now() + chrono::Duration::seconds(60);
+                            let _ = self.file_store.save_task(&task);
+                            return Ok(());
+                        }
+                    }
+                }
+            }
             let q = self.clone();
             tokio::spawn(async move {
                 q.execute_task(task).await;
@@ -88,8 +103,21 @@ impl SnerdQueue {
         };
 
         let now = Utc::now();
-        for task in tasks {
+        for mut task in tasks {
             if task.retry_after_time <= now && task.deleted_at.is_none() {
+                if let Some(ref group) = task.rate_limit_group {
+                    if let Some(limit) = task.max_per_minute {
+                        match self.rate_limiter.check_and_increment(group, limit) {
+                            Ok(true) => {}
+                            Ok(false) | Err(_) => {
+                                task.retry_after_time = now + chrono::Duration::seconds(60);
+                                let _ = self.file_store.save_task(&task);
+                                continue;
+                            }
+                        }
+                    }
+                }
+
                 let q = self.clone();
                 tokio::spawn(async move {
                     q.execute_task(task).await;
