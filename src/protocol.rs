@@ -43,7 +43,7 @@ pub enum OutgoingMessage {
         task_data: String,
     },
     #[serde(rename = "ack")]
-    Ack { message: String },
+    Ack { #[serde(skip_serializing_if = "Option::is_none")] task_id: Option<String>, message: String },
     #[serde(rename = "error")]
-    Error { message: String },
+    Error { #[serde(skip_serializing_if = "Option::is_none")] task_id: Option<String>, message: String },
 }
