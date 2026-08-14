@@ -1,23 +1,54 @@
 <div align="center">
-  <h1>🚀 SnerdMQ</h1>
-  <p>A lightning-fast, polyglot background job queue daemon powered by Rust.</p>
+  <img src="./assets/Designer-7.png" height="120" alt="SnerdMQ Logo" />
+  <h1>SnerdMQ v0.2.0</h1>
+  <p>The AI-Era polyglot background job queue daemon powered by Rust.</p>
 
   [![Crates.io](https://img.shields.io/crates/v/snerdmq)](https://crates.io/crates/snerdmq)
   [![License](https://img.shields.io/crates/l/snerdmq)](https://github.com/greyhands2/snerdmq/blob/main/LICENSE)
-  [![Build Status](https://github.com/greyhands2/snerdmq/actions/workflows/ci.yml/badge.svg)](https://github.com/greyhands2/snerdmq/actions)
-
 </div>
 
-`snerdmq` is a specialized, embedded sidecar daemon that handles all the complex logic of background job queues (polling, file locking, retries, dead-letter queues) in highly-optimized Rust, while letting you write the actual execution logic natively in **Node.js, Python, Go, Ruby, PHP, Java, or C#**.
+`snerdmq` is a specialized, embedded sidecar daemon that handles complex queue orchestration (file locking, retries, dead-letter queues, and now **AI orchestration**) in highly-optimized Rust. It lets you write your execution logic natively in **Node.js, Python, Go, Ruby, PHP, Java, or C#**.
 
-It runs as a child process and communicates via incredibly simple JSON over standard I/O pipes.
+It runs as a child process and communicates via incredibly fast JSON over standard I/O pipes.
 
-## ✨ Features
-- **Zero Networking**: No ports, no firewalls, no IP addresses to configure.
-- **Polyglot Friendly**: Works natively with any language that can spawn a child process.
-- **Bulletproof Durability**: Uses `fs3` OS-level file locking to ensure 100% ACID compliance and corruption-free storage.
-- **Smart Retries**: Built-in exponential backoff and Dead Letter Queue (DLQ) support.
-- **Microsecond Latency**: Built on Tokio for massive concurrency with zero CPU hogging.
+## ✨ v0.2.0 "AI-Era" Features
+
+Traditional message brokers force you to manage external servers. **SnerdMQ eliminates the network entirely** while bringing advanced orchestration specifically designed for AI workloads:
+
+- **Smart API Rate-Limiting**: Natively tracks `rate_limit_group` execution velocity. If you burst hundreds of LLM generation jobs, SnerdMQ pauses dispatching to prevent 429 "Too Many Requests" HTTP errors.
+- **Payload-Hashing Deduplication**: Automatically computes a cryptographic hash of your `task_data`. If an identical payload is in the queue (`auto_dedupe`), it silently drops the duplicate.
+- **Dynamic Float Prioritization**: A true Binary Max-Heap sorts pending jobs by an `urgency_score` (e.g., `0.95`). High-priority AI tasks bypass the standard FIFO queue with 0ms latency.
+- **Progress Streaming & Dashboard**: SDKs can emit `yieldProgress` partial chunks (ideal for streaming LLM tokens). The SnerdMQ daemon multiplexes these updates to a **built-in React UI dashboard** running on an embedded HTTP/WebSocket server.
+- **Bulletproof Durability**: `fs3` OS-level file locking ensures 100% ACID compliance and corruption-free local storage.
+
+
+### The JSON Protocol
+SnerdMQ expects simple JSON objects over STDIN. Here is exactly what an advanced AI task payload looks like:
+
+```json
+{
+  "action": "enqueue",
+  "task_type": "generate_llm_response",
+  "task_id": "req_9921",
+  "task_data": { "prompt": "Explain quantum physics to a toddler" },
+  
+  // v0.2.0 AI-Era Features
+  "auto_dedupe": true,              // Silently drop if this payload is already in the queue
+  "urgency_score": 0.95,            // Bypass standard FIFO queue; float to the top
+  "rate_limit_group": "anthropic",  // Group for backpressure
+  "max_per_minute": 50              // Prevent 429 API errors
+}
+```
+
+*Note: You rarely have to write this JSON yourself! The official Thin Client SDKs handle all of this automatically.*
+
+## ⚡ Architecture (Zero Networking)
+
+<div align="center">
+  <img src="./assets/architecture.gif" alt="SnerdMQ v0.2.0 Architecture" />
+  <br/>
+  <i>Zero-latency embedded queue orchestration featuring Real-Time Tracking</i>
+</div>
 
 ## 📦 Installation
 
@@ -27,37 +58,18 @@ cargo install snerdmq
 ```
 
 **Option 2: Pre-compiled Binaries (For production servers)**
-Simply download the appropriate binary for your OS from the [GitHub Releases](https://github.com/greyhands2/snerdmq/releases) page and place it in your project.
-
----
-
-## ⚡ How it Works (The Architecture)
-
-Traditional message brokers (Kafka, Redis, RabbitMQ) force you to manage external servers, configure complex networking, and suffer from TCP latency on every single job execution. 
-
-**SnerdMQ eliminates the network entirely.** It runs as a lightweight child process attached directly to your application container, communicating via 0-latency STDIN/STDOUT pipes.
-
-<div align="center">
-  <img src="./assets/architecture.gif" alt="SnerdMQ Architecture (Zero Networking)" />
-  <br/>
-  <i>Zero-latency embedded queue orchestration via standard I/O</i>
-</div>
+Download the appropriate binary for your OS from the [GitHub Releases](https://github.com/greyhands2/snerdmq/releases) page.
 
 ## 🌍 Distributed Scaling (Kubernetes / EC2)
 
-`snerdmq` is incredibly simple to run on a single machine. But what if you have 10 microservices running behind a load balancer?
-
 By default, `snerdmq` stores its queue in a local file at `.snerdata/tasks/tasks.log`. 
-To scale horizontally across multiple isolated servers, simply mount a **Shared Network Drive (like AWS EFS or an NFS volume)** to all of your servers and pass that shared path as a command-line argument when you spawn the daemon:
+To scale horizontally across multiple isolated servers, simply mount a **Shared Network Drive (like AWS EFS or an NFS volume)** to all of your servers:
 
 ```bash
 # All 10 servers point to the exact same shared file!
 ./snerdmq /mnt/aws-efs-shared-drive/snerd_tasks.log
 ```
-
-Thanks to our native OS file locking (`flock`), if two servers try to enqueue or execute a task at the exact same millisecond, the Operating System will perfectly synchronize the lock, guaranteeing zero data corruption across your cluster!
-
----
+Native OS file locking (`flock`) guarantees zero data corruption across your cluster—no Redis required.
 
 ## 🐳 Docker & Cloud Deployments (ECS / K8s / Droplets)
 
@@ -96,7 +108,7 @@ Depending on your language, the SnerdMQ ecosystem offers two distinct ways to ru
 
 ---
 
-## 🔧 Language SDKs (Thin Clients)
+## 🔧 Official SDKs (Thin Clients)
 To communicate with the `snerdmq` daemon effortlessly, use our official Thin Client SDKs:
 - [x] [Node.js / TypeScript (snerdmq-node)](https://www.npmjs.com/package/snerdmq-node)
 - [x] [Python (snerdmq-python)](https://pypi.org/project/snerdmq-python/)
