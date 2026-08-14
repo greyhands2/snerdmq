@@ -46,6 +46,9 @@ pub struct RetryableTask {
     #[serde(rename = "autoDedupe", skip_serializing_if = "Option::is_none")]
     pub auto_dedupe: Option<bool>,
 
+    #[serde(rename = "urgencyScore", skip_serializing_if = "Option::is_none")]
+    pub urgency_score: Option<f64>,
+
     #[serde(rename = "payloadHash", skip_serializing_if = "Option::is_none")]
     pub payload_hash: Option<String>,
 
@@ -69,6 +72,7 @@ impl RetryableTask {
         rate_limit_group: Option<String>,
         max_per_minute: Option<i32>,
         auto_dedupe: Option<bool>,
+        urgency_score: Option<f64>,
     ) -> Self {
         let now = Utc::now();
         let payload_hash = if auto_dedupe.unwrap_or(false) {
@@ -92,6 +96,7 @@ impl RetryableTask {
             rate_limit_group,
             max_per_minute,
             auto_dedupe,
+            urgency_score,
             payload_hash,
             deleted_at: None,
             created_at: now,
@@ -123,5 +128,34 @@ impl RetryableTask {
         }
 
         self.updated_at = Utc::now();
+    }
+}
+
+use std::cmp::Ordering;
+
+#[derive(Clone)]
+pub struct PriorityTask(pub RetryableTask);
+
+impl PartialEq for PriorityTask {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.task_id == other.0.task_id
+    }
+}
+
+impl Eq for PriorityTask {}
+
+impl PartialOrd for PriorityTask {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PriorityTask {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let score_a = self.0.urgency_score.unwrap_or(0.0);
+        let score_b = other.0.urgency_score.unwrap_or(0.0);
+        
+        // Reverse order so the max score is popped first
+        score_a.partial_cmp(&score_b).unwrap_or(Ordering::Equal)
     }
 }
