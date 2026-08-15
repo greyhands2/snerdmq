@@ -30,7 +30,9 @@ SnerdMQ expects simple JSON objects over STDIN. Here is exactly what an advanced
   "action": "enqueue",
   "task_type": "generate_llm_response",
   "task_id": "req_9921",
-  "task_data": { "prompt": "Explain quantum physics to a toddler" },
+  "task_data": "{\"prompt\": \"Explain quantum physics to a toddler\"}",
+  "max_retries": 3,
+  "retry_after_hours": 1.0,
   
   // v0.2.0 AI-Era Features
   "auto_dedupe": true,              // Silently drop if this payload is already in the queue
@@ -134,7 +136,9 @@ fn main() {
         "action": "enqueue",
         "task_type": "rust_heavy_compute",
         "task_id": "rust_001",
-        "task_data": { "matrix_size": 1000 },
+        "task_data": "{\"matrix_size\": 1000}",
+        "max_retries": 3,
+        "retry_after_hours": 0.5,
         "auto_dedupe": true,
         "urgency_score": 0.99
     });
