@@ -122,8 +122,17 @@ use std::io::Write;
 use serde_json::json;
 
 fn main() {
+    // Advanced: Distributed Scaling
+    // If you have multiple Rust servers behind a load balancer, point the daemon 
+    // to a Shared Network Drive (like AWS EFS) by passing it as an argument!
+    let storage_path = "/mnt/aws-efs-shared-drive/snerd_tasks.log";
+    
+    // Or, for local single-server storage:
+    // let storage_path = ".snerdata/tasks/tasks.log";
+
     // Spawn the daemon
     let mut child = Command::new("snerdmq")
+        .arg(storage_path)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -132,6 +141,7 @@ fn main() {
     // Write a task over STDIN using the JSON protocol
     let mut stdin = child.stdin.take().expect("Failed to open stdin");
     
+    // Full features payload (AI-Era)
     let task = json!({
         "action": "enqueue",
         "task_type": "rust_heavy_compute",
@@ -140,7 +150,9 @@ fn main() {
         "max_retries": 3,
         "retry_after_hours": 0.5,
         "auto_dedupe": true,
-        "urgency_score": 0.99
+        "urgency_score": 0.99,
+        "rate_limit_group": "heavy_compute",
+        "max_per_minute": 10
     });
 
     writeln!(stdin, "{}", task.to_string()).unwrap();
