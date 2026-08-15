@@ -5,6 +5,13 @@ edition = "2024"
 description = "A lightweight, robust, asynchronous background job queue polyglot IPC daemon."
 license = "MIT"
 repository = "https://github.com/greyhands2/snerdmq"
+exclude = [
+    "assets/*.mov",
+    "assets/*.gif",
+    "assets/*.html",
+    ".snerdata/*",
+    ".DS_Store"
+]
 
 [dependencies]
 chrono = { version = "0.4.45", features = ["serde"] }
