@@ -1,6 +1,6 @@
 <div align="center">
   <img src="./assets/Designer-9.png" height="120" alt="SnerdMQ Logo" />
-  <h1>SnerdMQ v0.2.4</h1>
+  <h1>SnerdMQ v0.2.5</h1>
   <p>The AI-Era polyglot background job queue daemon powered by Rust.</p>
 
   [![Crates.io](https://img.shields.io/crates/v/snerdmq)](https://crates.io/crates/snerdmq)
@@ -11,7 +11,7 @@
 
 It runs as a child process and communicates via incredibly fast JSON over standard I/O pipes.
 
-## ✨ v0.2.4 "AI-Era" Features
+## ✨ v0.2.5 "AI-Era" Features
 
 Traditional message brokers force you to manage external servers. **SnerdMQ eliminates the network entirely** while bringing advanced orchestration specifically designed for AI workloads:
 
@@ -34,7 +34,7 @@ SnerdMQ expects simple JSON objects over STDIN. Here is exactly what an advanced
   "max_retries": 3,
   "retry_after_hours": 1.0,
   
-  // v0.2.4 AI-Era Features
+  // v0.2.5 AI-Era Features
   "auto_dedupe": true,              // Silently drop if this payload is already in the queue
   "urgency_score": 0.95,            // Bypass standard FIFO queue; float to the top
   "rate_limit_group": "anthropic",  // Group for backpressure
@@ -45,7 +45,7 @@ SnerdMQ expects simple JSON objects over STDIN. Here is exactly what an advanced
 *Note: You rarely have to write this JSON yourself! The official Thin Client SDKs handle all of this automatically.*
 
 
-### ⚙️ Advanced Task Configuration (v0.2.4)
+### ⚙️ Advanced Task Configuration (v0.2.5)
 To power complex AI workflows, tasks can now be configured with advanced orchestration parameters:
 
 * **`auto_dedupe` (`bool`)**: If set to `true`, the daemon computes a cryptographic hash of the `task_type` and `task_data`. If an identical payload is currently sitting in the queue pending execution, this new task is silently dropped. Excellent for preventing duplicate generative AI requests from trigger-happy users!
@@ -56,7 +56,7 @@ To power complex AI workflows, tasks can now be configured with advanced orchest
 ## ⚡ Architecture (Zero Networking)
 
 <div align="center">
-  <img src="./assets/architecture.gif" alt="SnerdMQ v0.2.4 Architecture" />
+  <img src="./assets/architecture.gif" alt="SnerdMQ v0.2.5 Architecture" />
   <br/>
   <i>Zero-latency embedded queue orchestration featuring Real-Time Tracking</i>
 </div>
@@ -110,54 +110,11 @@ When scaling horizontally across a cluster, just mount an **Amazon EFS** (or any
 Depending on your language, the SnerdMQ ecosystem offers two distinct ways to run background jobs.
 
 ### For Rust Developers
-- Use [**`snerd-rust`**](https://github.com/greyhands2/snerd-rust): This is the **Embedded Library**. Best for pure Rust microservices that want to compile the queue directly into their binary for a zero-dependency, single-file deployment.
-- Use [**`snerdmq`**](https://github.com/greyhands2/snerdmq): This is the **Sidecar Daemon**. Best for polyglot systems, or when developers want strict process isolation (so an application crash/panic doesn't kill the queue orchestrator).
+⚠️ **Important**: Do not use this daemon if you are building a Rust application! 
 
-**Example: Calling the SnerdMQ Sidecar Daemon from Rust**
-If you are using the Sidecar daemon in Rust instead of the embedded library, you can spawn the daemon as a child process and pass JSON payloads instantly over standard I/O:
+Because there is no "thin-client SDK" for Rust, communicating with this daemon from Rust requires manually parsing raw JSON over standard I/O pipes. Instead, you should always use our native embedded crate: [**`snerd-rust`**](https://github.com/greyhands2/snerd-rust).
 
-```rust
-use std::process::{Command, Stdio};
-use std::io::Write;
-use serde_json::json;
-
-fn main() {
-    // Advanced: Distributed Scaling
-    // If you have multiple Rust servers behind a load balancer, point the daemon 
-    // to a Shared Network Drive (like AWS EFS) by passing it as an argument!
-    let storage_path = "/mnt/aws-efs-shared-drive/snerd_tasks.log";
-    
-    // Or, for local single-server storage:
-    // let storage_path = ".snerdata/tasks/tasks.log";
-
-    // Spawn the daemon
-    let mut child = Command::new("snerdmq")
-        .arg(storage_path)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("Failed to spawn SnerdMQ daemon");
-
-    // Write a task over STDIN using the JSON protocol
-    let mut stdin = child.stdin.take().expect("Failed to open stdin");
-    
-    // Full features payload (AI-Era)
-    let task = json!({
-        "action": "enqueue",
-        "task_type": "rust_heavy_compute",
-        "task_id": "rust_001",
-        "task_data": "{\"matrix_size\": 1000}",
-        "max_retries": 3,
-        "retry_after_hours": 0.5,
-        "auto_dedupe": true,
-        "urgency_score": 0.99,
-        "rate_limit_group": "heavy_compute",
-        "max_per_minute": 10
-    });
-
-    writeln!(stdin, "{}", task.to_string()).unwrap();
-}
-```
+`snerd-rust` gives you beautiful native closures (`queue.register_task_handler`), maximum performance, and can seamlessly share the exact same queue `.log` file with Node.js/Python microservices via native OS `flock` boundaries.
 
 
 ### For Go Developers
