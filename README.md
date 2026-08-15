@@ -1,6 +1,6 @@
 <div align="center">
   <img src="./assets/Designer-9.png" height="120" alt="SnerdMQ Logo" />
-  <h1>SnerdMQ v0.2.0</h1>
+  <h1>SnerdMQ v0.2.4</h1>
   <p>The AI-Era polyglot background job queue daemon powered by Rust.</p>
 
   [![Crates.io](https://img.shields.io/crates/v/snerdmq)](https://crates.io/crates/snerdmq)
@@ -11,7 +11,7 @@
 
 It runs as a child process and communicates via incredibly fast JSON over standard I/O pipes.
 
-## ✨ v0.2.0 "AI-Era" Features
+## ✨ v0.2.4 "AI-Era" Features
 
 Traditional message brokers force you to manage external servers. **SnerdMQ eliminates the network entirely** while bringing advanced orchestration specifically designed for AI workloads:
 
@@ -34,7 +34,7 @@ SnerdMQ expects simple JSON objects over STDIN. Here is exactly what an advanced
   "max_retries": 3,
   "retry_after_hours": 1.0,
   
-  // v0.2.0 AI-Era Features
+  // v0.2.4 AI-Era Features
   "auto_dedupe": true,              // Silently drop if this payload is already in the queue
   "urgency_score": 0.95,            // Bypass standard FIFO queue; float to the top
   "rate_limit_group": "anthropic",  // Group for backpressure
@@ -45,7 +45,7 @@ SnerdMQ expects simple JSON objects over STDIN. Here is exactly what an advanced
 *Note: You rarely have to write this JSON yourself! The official Thin Client SDKs handle all of this automatically.*
 
 
-### ⚙️ Advanced Task Configuration (v0.2.0)
+### ⚙️ Advanced Task Configuration (v0.2.4)
 To power complex AI workflows, tasks can now be configured with advanced orchestration parameters:
 
 * **`auto_dedupe` (`bool`)**: If set to `true`, the daemon computes a cryptographic hash of the `task_type` and `task_data`. If an identical payload is currently sitting in the queue pending execution, this new task is silently dropped. Excellent for preventing duplicate generative AI requests from trigger-happy users!
@@ -56,7 +56,7 @@ To power complex AI workflows, tasks can now be configured with advanced orchest
 ## ⚡ Architecture (Zero Networking)
 
 <div align="center">
-  <img src="./assets/architecture.gif" alt="SnerdMQ v0.2.0 Architecture" />
+  <img src="./assets/architecture.gif" alt="SnerdMQ v0.2.4 Architecture" />
   <br/>
   <i>Zero-latency embedded queue orchestration featuring Real-Time Tracking</i>
 </div>
