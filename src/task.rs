@@ -55,6 +55,12 @@ pub struct RetryableTask {
     #[serde(rename = "deletedAt", skip_serializing_if = "Option::is_none")]
     pub deleted_at: Option<DateTime<Utc>>,
 
+    #[serde(rename = "executeAt")]
+    pub execute_at: DateTime<Utc>,
+
+    #[serde(rename = "cronExpression", skip_serializing_if = "Option::is_none")]
+    pub cron_expression: Option<String>,
+
     #[serde(skip, default = "Utc::now")]
     pub created_at: DateTime<Utc>,
 
@@ -73,8 +79,30 @@ impl RetryableTask {
         max_per_minute: Option<i32>,
         auto_dedupe: Option<bool>,
         urgency_score: Option<f64>,
+        execute_at_opt: Option<String>,
+        cron_opt: Option<String>,
     ) -> Self {
         let now = Utc::now();
+
+        // Parse execute_at if provided, else use now
+        let mut execute_at = now;
+        let parsed_cron = cron_opt.map(|c| parse_cron_syntax(&c));
+        
+        if let Some(ref exec_str) = execute_at_opt {
+            if let Ok(parsed_time) = chrono::DateTime::parse_from_rfc3339(exec_str) {
+                execute_at = parsed_time.with_timezone(&Utc);
+            }
+        } else if let Some(ref cron_expr) = parsed_cron {
+            // If no explicit execute_at is provided, but a cron is, default to the FIRST future cron tick!
+            use cron::Schedule;
+            use std::str::FromStr;
+            if let Ok(schedule) = Schedule::from_str(cron_expr) {
+                if let Some(next) = schedule.upcoming(Utc).next() {
+                    execute_at = next;
+                }
+            }
+        }
+
         let payload_hash = if auto_dedupe.unwrap_or(false) {
             use xxhash_rust::xxh64::xxh64;
             let combined = format!("{}{}", task_type, task_data);
@@ -99,6 +127,8 @@ impl RetryableTask {
             urgency_score,
             payload_hash,
             deleted_at: None,
+            execute_at,
+            cron_expression: parsed_cron,
             created_at: now,
             updated_at: now,
         }
@@ -129,6 +159,42 @@ impl RetryableTask {
 
         self.updated_at = Utc::now();
     }
+}
+
+pub fn parse_cron_syntax(input: &str) -> String {
+    let input = input.trim();
+    // Shorthands
+    if let Some(val) = input.strip_suffix("s") {
+        if let Ok(num) = val.parse::<u32>() {
+            return format!("*/{} * * * * *", num);
+        }
+    }
+    if let Some(val) = input.strip_suffix("m") {
+        if let Ok(num) = val.parse::<u32>() {
+            return format!("0 */{} * * * *", num);
+        }
+    }
+    if let Some(val) = input.strip_suffix("h") {
+        if let Ok(num) = val.parse::<u32>() {
+            return format!("0 0 */{} * * *", num);
+        }
+    }
+    if let Some(val) = input.strip_suffix("d") {
+        if let Ok(num) = val.parse::<u32>() {
+            return format!("0 0 0 */{} * *", num);
+        }
+    }
+    
+    // Check if it's 5 fields (standard cron)
+    let parts: Vec<&str> = input.split_whitespace().collect();
+    if parts.len() == 5 {
+        return format!("0 {} *", input);
+    }
+    if parts.len() == 6 {
+        return format!("{} *", input);
+    }
+    
+    input.to_string()
 }
 
 use std::cmp::Ordering;

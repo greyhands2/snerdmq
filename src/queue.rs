@@ -104,7 +104,7 @@ impl SnerdQueue {
         task.deleted_at = None;
         self.file_store.save_task(&task)?;
 
-        if task.retry_after_time <= Utc::now() {
+        if task.execute_at <= Utc::now() && task.retry_after_time <= Utc::now() {
             if let Some(ref group) = task.rate_limit_group {
                 if let Some(limit) = task.max_per_minute {
                     match self.rate_limiter.check_and_increment(group, limit) {
@@ -159,7 +159,7 @@ impl SnerdQueue {
         let mut heap = BinaryHeap::new();
         
         for task in tasks {
-            if task.retry_after_time <= now && task.deleted_at.is_none() {
+            if task.execute_at <= now && task.retry_after_time <= now && task.deleted_at.is_none() {
                 heap.push(PriorityTask(task));
             }
         }
@@ -218,10 +218,28 @@ impl SnerdQueue {
 
             match result {
                 Ok(_) => {
-                    let _ = self.file_store.delete_task(&task.task_id);
-                    if let Some(ref hash) = task.payload_hash {
-                        if let Ok(mut hashes) = self.active_hashes.lock() {
-                            hashes.remove(hash);
+                    let mut rescheduled = false;
+                    if let Some(ref cron_expr) = task.cron_expression {
+                        use cron::Schedule;
+                        use std::str::FromStr;
+                        if let Ok(schedule) = Schedule::from_str(cron_expr) {
+                            if let Some(next) = schedule.upcoming(Utc).next() {
+                                task.execute_at = next;
+                                task.retry_count = 0;
+                                task.last_error_obj = None;
+                                task.last_job_error = None;
+                                let _ = self.file_store.save_task(&task);
+                                rescheduled = true;
+                            }
+                        }
+                    }
+                    
+                    if !rescheduled {
+                        let _ = self.file_store.delete_task(&task.task_id);
+                        if let Some(ref hash) = task.payload_hash {
+                            if let Ok(mut hashes) = self.active_hashes.lock() {
+                                hashes.remove(hash);
+                            }
                         }
                     }
                 }
