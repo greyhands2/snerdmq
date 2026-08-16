@@ -20,6 +20,10 @@ pub enum IncomingMessage {
         auto_dedupe: Option<bool>,
         #[serde(skip_serializing_if = "Option::is_none")]
         urgency_score: Option<f64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        execute_at: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        cron: Option<String>,
     },
     #[serde(rename = "progress")]
     Progress {
