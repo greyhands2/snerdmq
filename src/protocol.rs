@@ -24,6 +24,8 @@ pub enum IncomingMessage {
         execute_at: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         cron: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        webhook_url: Option<String>,
     },
     #[serde(rename = "progress")]
     Progress {

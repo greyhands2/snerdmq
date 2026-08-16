@@ -102,6 +102,7 @@ async fn main() {
                 urgency_score,
                 execute_at,
                 cron,
+                webhook_url,
             }) => {
                 let t = RetryableTask::new(
                     task_id.clone(),
@@ -115,6 +116,7 @@ async fn main() {
                     urgency_score,
                     execute_at,
                     cron,
+                    webhook_url,
                 );
                 if let Err(e) = queue.enqueue(t) {
                     println!(
