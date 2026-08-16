@@ -40,7 +40,10 @@ SnerdMQ expects simple JSON objects over STDIN. Here is exactly what an advanced
   "rate_limit_group": "anthropic",  // Group for backpressure
   "max_per_minute": 50,             // Prevent 429 API errors
   "execute_at": "2026-10-31T23:59:00Z", // Schedule for future execution
-  "cron": "0 * * * *"               // Recurring cron schedule
+  "cron": "0 * * * *",              // Recurring cron schedule
+  
+  // v0.3.0 Webhook Feature
+  "webhook_url": "https://api.example.com/webhook" // Execute via HTTP instead of local handlers
 }
 ```
 
@@ -56,6 +59,24 @@ To power complex AI workflows, tasks can now be configured with advanced orchest
 * **`max_per_minute` (`int`)**: Used in conjunction with `rate_limit_group`. If the queue processes more tasks in this group than the allowed limit within a 60-second rolling window, further tasks in this group are temporarily paused. This natively prevents 429 "Too Many Requests" errors when bursting third-party APIs.
 * **`execute_at` (`string` | `DateTime`)**: A timestamp of when the job should be executed in the future.
 * **`cron` (`string`)**: A cron expression (e.g. `"0 * * * *"`) for recurring jobs. Shorthands like `"2h"` or `"10m"` are also supported.
+* **`webhook_url` (`string`)**: By providing a webhook URL, SnerdMQ will completely bypass your local SDK handlers and dispatch the task payload via an HTTP POST request directly to the specified URL.
+
+### 🌐 HTTP Webhooks (Serverless Execution)
+SnerdMQ can now act as a true distributed orchestrator. By supplying a `webhook_url` in the payload, SnerdMQ will fire an HTTP POST request to that URL to execute the task. 
+
+```json
+{
+  "action": "enqueue",
+  "task_type": "transcode_video",
+  "task_id": "vid_99",
+  "task_data": "{\"file\": \"s3://bucket/vid.mp4\"}",
+  "max_retries": 3,
+  "webhook_url": "https://serverless-workers.internal/transcode"
+}
+```
+
+The HTTP request will contain the header `X-SnerdMQ-Event: Execute`. 
+If a webhook task permanently fails (reaches `max_retries`), the Dead Letter Queue event is automatically fired via a final HTTP POST to the exact same `webhook_url` but with the header `X-SnerdMQ-Event: MaxRetriesReached`. This eliminates the need for SDK-side Max Retry handlers!
 
 ### 🕒 Cron Jobs vs. Retryable Jobs
 > - **A Cron Job** is a *Repeatable Job* that executes again **only after a success**, on a fixed schedule.
