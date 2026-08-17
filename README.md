@@ -60,6 +60,10 @@ To power complex AI workflows, tasks can now be configured with advanced orchest
 * **`execute_at` (`string` | `DateTime`)**: A timestamp of when the job should be executed in the future.
 * **`cron` (`string`)**: A cron expression (e.g. `"0 * * * *"`) for recurring jobs. Shorthands like `"2h"` or `"10m"` are also supported.
 * **`webhook_url` (`string`)**: By providing a webhook URL, SnerdMQ will completely bypass your local SDK handlers and dispatch the task payload via an HTTP POST request directly to the specified URL.
+* **`max_execution_seconds` (`u64`)**: Optional hard timeout in seconds. If execution takes longer, the worker pool forceful kills it.
+
+### Note on Hard Timeouts (`max_execution_seconds`)
+When `max_execution_seconds` is provided, the Rust daemon wraps the execution in a `tokio::time::timeout`. If the task execution takes longer than the timeout, the daemon will cancel the task, free up the worker slot, and mark the execution as failed (it will be retried if `max_retries` allows).
 
 ### 🌐 HTTP Webhooks (Serverless Execution)
 SnerdMQ can now act as a true distributed orchestrator. By supplying a `webhook_url` in the payload, SnerdMQ will fire an HTTP POST request to that URL to execute the task. 
