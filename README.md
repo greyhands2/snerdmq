@@ -1,6 +1,6 @@
 <div align="center">
   <img src="./assets/Designer-9.png" height="120" alt="SnerdMQ Logo" />
-  <h1>SnerdMQ v0.2.5</h1>
+  <h1>SnerdMQ v0.2.7</h1>
   <p>The AI polyglot background job queue daemon powered by Rust.</p>
 
   [![Crates.io](https://img.shields.io/crates/v/snerdmq)](https://crates.io/crates/snerdmq)
@@ -11,7 +11,7 @@
 
 It runs as a child process and communicates via incredibly fast JSON over standard I/O pipes.
 
-## ✨ v0.2.5 "AI" Features
+## ✨ v0.2.7 "AI" Features
 
 Traditional message brokers force you to manage external servers. **SnerdMQ eliminates the network entirely** while bringing advanced orchestration specifically designed for AI workloads:
 
@@ -34,7 +34,7 @@ SnerdMQ expects simple JSON objects over STDIN. Here is exactly what an advanced
   "max_retries": 3,
   "retry_after_hours": 1.0,
   
-  // v0.2.5 AI Features
+  // v0.2.7 AI Features
   "auto_dedupe": true,              // Silently drop if this payload is already in the queue
   "urgency_score": 0.95,            // Bypass standard FIFO queue; float to the top
   "rate_limit_group": "anthropic",  // Group for backpressure
@@ -42,7 +42,7 @@ SnerdMQ expects simple JSON objects over STDIN. Here is exactly what an advanced
   "execute_at": "2026-10-31T23:59:00Z", // Schedule for future execution
   "cron": "0 * * * *",              // Recurring cron schedule
   
-  // v0.3.0 Webhook Feature
+  // v0.2.7 Webhook Feature
   "webhook_url": "https://api.example.com/webhook" // Execute via HTTP instead of local handlers
 }
 ```
@@ -50,7 +50,7 @@ SnerdMQ expects simple JSON objects over STDIN. Here is exactly what an advanced
 *Note: You rarely have to write this JSON yourself! The official Thin Client SDKs handle all of this automatically.*
 
 
-### ⚙️ Advanced Task Configuration (v0.2.5)
+### ⚙️ Advanced Task Configuration (v0.2.7)
 To power complex AI workflows, tasks can now be configured with advanced orchestration parameters:
 
 * **`auto_dedupe` (`bool`)**: If set to `true`, the daemon computes a cryptographic hash of the `task_type` and `task_data`. If an identical payload is currently sitting in the queue pending execution, this new task is silently dropped. Excellent for preventing duplicate generative AI requests from trigger-happy users!
@@ -90,7 +90,7 @@ If a webhook task permanently fails (reaches `max_retries`), the Dead Letter Que
 ## ⚡ Architecture (Zero Networking)
 
 <div align="center">
-  <img src="./assets/architecture.gif" alt="SnerdMQ v0.2.5 Architecture" />
+  <img src="./assets/architecture.gif" alt="SnerdMQ v0.2.7 Architecture" />
   <br/>
   <i>Zero-latency embedded queue orchestration featuring Real-Time Tracking</i>
 </div>
@@ -146,14 +146,14 @@ Depending on your language, the SnerdMQ ecosystem offers two distinct ways to ru
 ### For Rust Developers
 ⚠️ **Important**: Do not use this daemon if you are building a Rust application! 
 
-Because there is no "thin-client SDK" for Rust, communicating with this daemon from Rust requires manually parsing raw JSON over standard I/O pipes. Instead, you should always use our native embedded crate: [**`snerd-rust`**](https://github.com/greyhands2/snerd-rust).
+Because there is no "thin-client SDK" for Rust, communicating with this daemon from Rust requires manually parsing raw JSON over standard I/O pipes. Instead, you should always use our native embedded crate: [**`snerd-rust`**](https://crates.io/crates/snerd-rust).
 
 `snerd-rust` gives you beautiful native closures (`queue.register_task_handler`), maximum performance, and can seamlessly share the exact same queue `.log` file with Node.js/Python microservices via native OS `flock` boundaries.
 
 
 ### For Go Developers
-- Use [**`snerd-go`**](https://github.com/greyhands2/snerd-go): This is the **Embedded Library**. Best for pure Go applications that want native Goroutine orchestration without needing to bundle or download a pre-compiled Rust binary.
-- Use [**`snerdmq-go`**](https://github.com/greyhands2/snerdmq-go): This is the **Thin Client SDK**. Best for Go apps running in a polyglot microservices cluster where all microservices (Node, Python, Go) need to share the exact same queue storage format and Rust-powered `fs3` file-locking engine.
+- Use [**`snerd-go`**](https://pkg.go.dev/github.com/greyhands2/snerd-go): This is the **Embedded Library**. Best for pure Go applications that want native Goroutine orchestration without needing to bundle or download a pre-compiled Rust binary.
+- Use [**`snerdmq-go`**](https://pkg.go.dev/github.com/greyhands2/snerdmq-go): This is the **Thin Client SDK**. Best for Go apps running in a polyglot microservices cluster where all microservices (Node, Python, Go) need to share the exact same queue storage format and Rust-powered `fs3` file-locking engine.
 
 ---
 
