@@ -55,9 +55,23 @@ async fn main() {
                                 task_id: task.task_id.clone(),
                                 task_type: t_type,
                                 task_data: task.task_data.clone(),
+                                max_execution_seconds: task.max_execution_seconds,
                             };
                             println!("{}", serde_json::to_string(&out_msg).unwrap());
-                            match rx.await {
+                            
+                            let rx_result = if let Some(secs) = task.max_execution_seconds {
+                                match tokio::time::timeout(std::time::Duration::from_secs(secs), rx).await {
+                                    Ok(res) => res,
+                                    Err(_) => {
+                                        pending.write().await.remove(&task.task_id);
+                                        return Err(format!("Task execution timed out after {} seconds", secs));
+                                    }
+                                }
+                            } else {
+                                rx.await
+                            };
+
+                            match rx_result {
                                 Ok(res) => res,
                                 Err(_) => Err("Client disconnected before responding".to_string()),
                             }
@@ -103,6 +117,7 @@ async fn main() {
                 execute_at,
                 cron,
                 webhook_url,
+                max_execution_seconds,
             }) => {
                 let t = RetryableTask::new(
                     task_id.clone(),
@@ -117,6 +132,7 @@ async fn main() {
                     execute_at,
                     cron,
                     webhook_url,
+                    max_execution_seconds,
                 );
                 if let Err(e) = queue.enqueue(t) {
                     println!(

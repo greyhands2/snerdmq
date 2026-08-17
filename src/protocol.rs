@@ -26,6 +26,8 @@ pub enum IncomingMessage {
         cron: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         webhook_url: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        max_execution_seconds: Option<u64>,
     },
     #[serde(rename = "progress")]
     Progress {
@@ -48,6 +50,8 @@ pub enum OutgoingMessage {
         task_id: String,
         task_type: String,
         task_data: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        max_execution_seconds: Option<u64>,
     },
     #[serde(rename = "max_retries_reached")]
     MaxRetriesReached {
