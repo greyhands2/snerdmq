@@ -4,7 +4,7 @@
   <p>The AI polyglot background job queue daemon powered by Rust.</p>
 
   [![Crates.io](https://img.shields.io/crates/v/snerdmq)](https://crates.io/crates/snerdmq)
-  [![License](https://img.shields.io/crates/l/snerdmq)](https://github.com/greyhands2/snerdmq/blob/main/LICENSE)
+  [![License](https://img.shields.io/crates/l/snerdmq)](https://github.com/speed-nerd/snerdmq/blob/main/LICENSE)
 </div>
 
 `snerdmq` is a specialized, embedded sidecar daemon that handles complex queue orchestration (file locking, retries, dead-letter queues, and now **AI orchestration**) in highly-optimized Rust. It lets you write your execution logic natively in **Node.js, Python, Go, Ruby, PHP, Java, or C#**.
@@ -103,7 +103,7 @@ cargo install snerdmq
 ```
 
 **Option 2: Pre-compiled Binaries (For production servers)**
-Download the appropriate binary for your OS from the [GitHub Releases](https://github.com/greyhands2/snerdmq/releases) page.
+Download the appropriate binary for your OS from the [GitHub Releases](https://github.com/speed-nerd/snerdmq/releases) page.
 
 ## 🌍 Distributed Scaling (Kubernetes / EC2)
 
@@ -125,7 +125,7 @@ Because `snerdmq` runs directly over standard I/O pipes rather than TCP, you do 
 FROM node:20-alpine
 
 # Simply copy the SnerdMQ binary into your application container
-COPY --from=greyhands2/snerdmq-release /bin/snerdmq /usr/local/bin/snerdmq
+COPY --from=speed-nerd/snerdmq-release /bin/snerdmq /usr/local/bin/snerdmq
 
 # Your application's SDK will automatically spawn the daemon internally!
 CMD ["node", "app.js"]
@@ -152,8 +152,8 @@ Because there is no "thin-client SDK" for Rust, communicating with this daemon f
 
 
 ### For Go Developers
-- Use [**`snerd-go`**](https://pkg.go.dev/github.com/greyhands2/snerd-go): This is the **Embedded Library**. Best for pure Go applications that want native Goroutine orchestration without needing to bundle or download a pre-compiled Rust binary.
-- Use [**`snerdmq-go`**](https://pkg.go.dev/github.com/greyhands2/snerdmq-go): This is the **Thin Client SDK**. Best for Go apps running in a polyglot microservices cluster where all microservices (Node, Python, Go) need to share the exact same queue storage format and Rust-powered `fs3` file-locking engine.
+- Use [**`snerd-go`**](https://pkg.go.dev/github.com/speed-nerd/snerd-go): This is the **Embedded Library**. Best for pure Go applications that want native Goroutine orchestration without needing to bundle or download a pre-compiled Rust binary.
+- Use [**`snerdmq-go`**](https://pkg.go.dev/github.com/speed-nerd/snerdmq-go): This is the **Thin Client SDK**. Best for Go apps running in a polyglot microservices cluster where all microservices (Node, Python, Go) need to share the exact same queue storage format and Rust-powered `fs3` file-locking engine.
 
 ---
 
@@ -161,10 +161,10 @@ Because there is no "thin-client SDK" for Rust, communicating with this daemon f
 To communicate with the `snerdmq` daemon effortlessly, use our official Thin Client SDKs:
 - [x] [Node.js / TypeScript (snerdmq-node)](https://www.npmjs.com/package/snerdmq-node)
 - [x] [Python (snerdmq-python)](https://pypi.org/project/snerdmq-python/)
-- [x] [Go (snerdmq-go)](https://pkg.go.dev/github.com/greyhands2/snerdmq-go)
+- [x] [Go (snerdmq-go)](https://pkg.go.dev/github.com/speed-nerd/snerdmq-go)
 - [x] [Ruby (snerdmq-ruby)](https://rubygems.org/gems/snerdmq)
-- [x] [PHP (snerdmq-php)](https://packagist.org/packages/greyhands2/snerdmq)
-- [x] [Java / Kotlin (snerdmq-java)](https://central.sonatype.com/artifact/io.github.greyhands2/snerdmq)
+- [x] [PHP (snerdmq-php)](https://packagist.org/packages/speed-nerd/snerdmq)
+- [x] [Java / Kotlin (snerdmq-java)](https://central.sonatype.com/artifact/io.github.speed-nerd/snerdmq)
 - [x] [C# / .NET (snerdmq-dotnet)](https://www.nuget.org/packages/SnerdMQ)
 
 *Built with ❤️ for John Wick tier engineering.*

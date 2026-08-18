@@ -4,7 +4,7 @@ version = "0.2.8"
 edition = "2024"
 description = "A lightweight, robust, asynchronous background job queue polyglot IPC daemon."
 license = "MIT"
-repository = "https://github.com/greyhands2/snerdmq"
+repository = "https://github.com/speed-nerd/snerdmq"
 exclude = [
     "assets/*.mov",
     "assets/*.gif",
