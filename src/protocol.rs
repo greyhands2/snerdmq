@@ -40,6 +40,8 @@ pub enum IncomingMessage {
         status: String,
         error_msg: Option<String>,
     },
+    #[serde(rename = "stats")]
+    Stats,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -68,4 +70,13 @@ pub enum OutgoingMessage {
     },
     #[serde(rename = "error")]
     Error { #[serde(skip_serializing_if = "Option::is_none")] task_id: Option<String>, message: String },
+    #[serde(rename = "stats")]
+    Stats {
+        total_enqueued: u64,
+        total_executed: u64,
+        total_failed: u64,
+        total_dlq: u64,
+        queue_depth: usize,
+        uptime_secs: u64,
+    },
 }

@@ -42,7 +42,17 @@ pub struct SnerdQueue {
     max_retry_handlers: Arc<RwLock<HashMap<String, MaxRetryHandler>>>,
     active_hashes: Arc<Mutex<HashSet<String>>>,
     executing_tasks: Arc<Mutex<HashSet<String>>>,
+    /// Tasks that have been pushed to shared_pq but haven't started executing yet.
+    /// Prevents process_due_tasks() from re-adding the same task to the queue.
+    queued_tasks: Arc<Mutex<HashSet<String>>>,
+    /// Tasks that have completed execution (successfully or max retries reached).
+    /// Final safety net to prevent duplicate execution.
+    completed_tasks: Arc<Mutex<HashSet<String>>>,
     worker_semaphore: Arc<Semaphore>,
+    /// Shared priority queue — workers always pop the highest-priority task next.
+    shared_pq: Arc<Mutex<BinaryHeap<PriorityTask>>>,
+    /// Number of active dispatcher loops (prevents duplicates).
+    dispatcher_count: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 impl SnerdQueue {
@@ -66,7 +76,11 @@ impl SnerdQueue {
             max_retry_handlers: Arc::new(RwLock::new(HashMap::new())),
             active_hashes: Arc::new(Mutex::new(initial_hashes)),
             executing_tasks: Arc::new(Mutex::new(HashSet::new())),
+            queued_tasks: Arc::new(Mutex::new(HashSet::new())),
+            completed_tasks: Arc::new(Mutex::new(HashSet::new())),
             worker_semaphore: Arc::new(Semaphore::new(100)), // Limit to 100 concurrent tasks
+            shared_pq: Arc::new(Mutex::new(BinaryHeap::new())),
+            dispatcher_count: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         }
     }
 
@@ -105,37 +119,12 @@ impl SnerdQueue {
         task.deleted_at = None;
         self.file_store.save_task(&task)?;
 
-        if task.execute_at <= Utc::now() && task.retry_after_time <= Utc::now() {
-            if let Some(ref group) = task.rate_limit_group {
-                if let Some(limit) = task.max_per_minute {
-                    match self.rate_limiter.check_and_increment(group, limit) {
-                        Ok(true) => {}
-                        Ok(false) | Err(_) => {
-                            task.retry_after_time = Utc::now() + chrono::Duration::seconds(60);
-                            let _ = self.file_store.save_task(&task);
-                            return Ok(());
-                        }
-                    }
-                }
-            }
-            
-            // Try to acquire a permit for immediate execution
-            if let Ok(permit) = self.worker_semaphore.clone().try_acquire_owned() {
-                // Lock check before executing
-                if let Ok(mut executing) = self.executing_tasks.lock() {
-                    if executing.contains(&task.task_id) {
-                        return Ok(());
-                    }
-                    executing.insert(task.task_id.clone());
-                }
-                
-                let q = self.clone();
-                tokio::spawn(async move {
-                    let _p = permit; // Hold permit until execution finishes
-                    q.execute_task(task).await;
-                });
-            }
-        }
+        // NOTE: We intentionally do NOT execute tasks immediately here.
+        // All execution goes through the periodic processor (process_due_tasks)
+        // which uses a BinaryHeap to respect priority ordering.
+        // The fast path would bypass priority and cause low-priority tasks
+        // enqueued first to always execute before high-priority tasks enqueued later.
+
         Ok(())
     }
 
@@ -157,52 +146,113 @@ impl SnerdQueue {
         };
 
         let now = Utc::now();
-        let mut heap = BinaryHeap::new();
-        
-        for task in tasks {
-            if task.execute_at <= now && task.retry_after_time <= now && task.deleted_at.is_none() {
-                heap.push(PriorityTask(task));
+
+        // IMPORTANT: Check against LIVE executing_tasks and queued_tasks sets
+        // (not snapshots) to prevent races where a task moves from queued → executing
+        // between our snapshot and our check, making it invisible to both.
+        {
+            let mut pq = self.shared_pq.lock().unwrap();
+            let mut queued = self.queued_tasks.lock().unwrap();
+            let executing = self.executing_tasks.lock().unwrap();
+            for task in tasks {
+                if task.execute_at <= now
+                    && task.retry_after_time <= now
+                    && task.deleted_at.is_none()
+                    && !executing.contains(&task.task_id)
+                    && !queued.contains(&task.task_id)
+                {
+                    queued.insert(task.task_id.clone());
+                    pq.push(PriorityTask(task));
+                }
             }
         }
 
-        let available = self.worker_semaphore.available_permits();
-        for _ in 0..available {
-            if let Some(PriorityTask(mut task)) = heap.pop() {
-                if let Some(ref group) = task.rate_limit_group {
-                    if let Some(limit) = task.max_per_minute {
-                        match self.rate_limiter.check_and_increment(group, limit) {
-                            Ok(true) => {}
-                            Ok(false) | Err(_) => {
-                                task.retry_after_time = now + chrono::Duration::seconds(60);
-                                let _ = self.file_store.save_task(&task);
-                                continue;
-                            }
-                        }
-                    }
-                }
-
-                // Lock check before executing
-                if let Ok(mut executing) = self.executing_tasks.lock() {
-                    if executing.contains(&task.task_id) {
-                        continue;
-                    }
-                    executing.insert(task.task_id.clone());
-                }
-
-                if let Ok(permit) = self.worker_semaphore.clone().try_acquire_owned() {
-                    let q = self.clone();
-                    tokio::spawn(async move {
-                        let _p = permit;
-                        q.execute_task(task).await;
-                    });
-                }
-            } else {
-                break;
-            }
+        // Start a priority dispatcher if there are tasks queued and not too many dispatchers
+        let pq_len = self.shared_pq.lock().unwrap().len();
+        if pq_len > 0 && self.dispatcher_count.load(std::sync::atomic::Ordering::Relaxed) < 2 {
+            self.spawn_dispatcher();
         }
     }
 
+    /// Spawns a persistent priority dispatcher that feeds tasks to workers
+    /// in strict priority order. The dispatcher acquires a semaphore permit
+    /// for each task, ensuring at most 100 concurrent executions. When a task
+    /// completes and releases its permit, the dispatcher wakes up and spawns
+    /// the next highest-priority task.
+    fn spawn_dispatcher(&self) {
+        self.dispatcher_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let q = self.clone();
+        tokio::spawn(async move {
+            loop {
+                // Acquire a concurrency permit (blocks if all 100 are in use)
+                let permit = match q.worker_semaphore.clone().acquire_owned().await {
+                    Ok(p) => p,
+                    Err(_) => break,
+                };
+
+                // Pop the highest-priority task from the shared queue
+                let task = {
+                    let mut pq = q.shared_pq.lock().unwrap();
+                    pq.pop()
+                };
+
+                match task {
+                    Some(PriorityTask(mut task)) => {
+                        // Rate limit check
+                        if let Some(ref group) = task.rate_limit_group {
+                            if let Some(limit) = task.max_per_minute {
+                                match q.rate_limiter.check_and_increment(group, limit) {
+                                    Ok(true) => {}
+                                    Ok(false) | Err(_) => {
+                                        task.retry_after_time = Utc::now() + chrono::Duration::seconds(60);
+                                        let _ = q.file_store.save_task(&task);
+                                        // Remove from queued so it can be re-queued after rate limit window
+                                        q.queued_tasks.lock().unwrap().remove(&task.task_id);
+                                        drop(permit); // Release permit without executing
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+
+                        // Move from queued to executing
+                        {
+                            let mut queued = q.queued_tasks.lock().unwrap();
+                            queued.remove(&task.task_id);
+                            let mut executing = q.executing_tasks.lock().unwrap();
+                            if executing.contains(&task.task_id) {
+                                drop(permit);
+                                continue;
+                            }
+                            executing.insert(task.task_id.clone());
+                        }
+
+                        let q2 = q.clone();
+                        tokio::spawn(async move {
+                            let _permit = permit; // Held until execution completes
+                            q2.execute_task(task).await;
+                            // Permit is released here when _permit drops
+                        });
+                    }
+                    None => {
+                        drop(permit);
+                        break; // Queue empty, dispatcher exits
+                    }
+                }
+            }
+            q.dispatcher_count.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+        });
+    }
+
     async fn execute_task(&self, mut task: RetryableTask) {
+        // Final safety check: skip if already completed (prevents duplicate execution)
+        {
+            let completed = self.completed_tasks.lock().unwrap();
+            if completed.contains(&task.task_id) {
+                return; // Already completed, skip
+            }
+        }
+
         // Drop guard guarantees removal from executing_tasks
         let _guard = ExecutingGuard {
             executing_tasks: Arc::clone(&self.executing_tasks),
@@ -260,6 +310,8 @@ impl SnerdQueue {
                 }
 
                 if !rescheduled {
+                    // Mark as completed to prevent duplicate execution
+                    self.completed_tasks.lock().unwrap().insert(task.task_id.clone());
                     let _ = self.file_store.delete_task(&task.task_id);
                     if let Some(ref hash) = task.payload_hash {
                         if let Ok(mut hashes) = self.active_hashes.lock() {
@@ -269,7 +321,10 @@ impl SnerdQueue {
                 }
             }
             Err(e) => {
-                if task.retry_count < task.max_retries {
+                // max_retries means total attempts (not retries after first).
+                // retry_count starts at 0 and update_retry_config increments it AFTER this check.
+                // So we allow retry while retry_count < max_retries - 1.
+                if task.retry_count < task.max_retries - 1 {
                     task.update_retry_config(Some(e));
                     let _ = self.file_store.save_task(&task);
                 } else {
@@ -300,6 +355,8 @@ impl SnerdQueue {
                         }
                     }
 
+                    // Mark as completed to prevent duplicate execution
+                    self.completed_tasks.lock().unwrap().insert(task.task_id.clone());
                     let _ = self.file_store.delete_task(&task.task_id);
                     if let Some(ref hash) = task.payload_hash {
                         if let Ok(mut hashes) = self.active_hashes.lock() {

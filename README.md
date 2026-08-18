@@ -1,6 +1,6 @@
 <div align="center">
   <img src="./assets/Designer-9.png" height="120" alt="SnerdMQ Logo" />
-  <h1>SnerdMQ v0.2.7</h1>
+  <h1>SnerdMQ v0.2.8</h1>
   <p>The AI polyglot background job queue daemon powered by Rust.</p>
 
   [![Crates.io](https://img.shields.io/crates/v/snerdmq)](https://crates.io/crates/snerdmq)
@@ -11,7 +11,7 @@
 
 It runs as a child process and communicates via incredibly fast JSON over standard I/O pipes.
 
-## ✨ v0.2.7 "AI" Features
+## ✨ v0.2.8 "AI" Features
 
 Traditional message brokers force you to manage external servers. **SnerdMQ eliminates the network entirely** while bringing advanced orchestration specifically designed for AI workloads:
 
@@ -34,7 +34,7 @@ SnerdMQ expects simple JSON objects over STDIN. Here is exactly what an advanced
   "max_retries": 3,
   "retry_after_hours": 1.0,
   
-  // v0.2.7 AI Features
+  // v0.2.8 AI Features
   "auto_dedupe": true,              // Silently drop if this payload is already in the queue
   "urgency_score": 0.95,            // Bypass standard FIFO queue; float to the top
   "rate_limit_group": "anthropic",  // Group for backpressure
@@ -42,7 +42,7 @@ SnerdMQ expects simple JSON objects over STDIN. Here is exactly what an advanced
   "execute_at": "2026-10-31T23:59:00Z", // Schedule for future execution
   "cron": "0 * * * *",              // Recurring cron schedule
   
-  // v0.2.7 Webhook Feature
+  // v0.2.8 Webhook Feature
   "webhook_url": "https://api.example.com/webhook" // Execute via HTTP instead of local handlers
 }
 ```
@@ -50,7 +50,7 @@ SnerdMQ expects simple JSON objects over STDIN. Here is exactly what an advanced
 *Note: You rarely have to write this JSON yourself! The official Thin Client SDKs handle all of this automatically.*
 
 
-### ⚙️ Advanced Task Configuration (v0.2.7)
+### ⚙️ Advanced Task Configuration (v0.2.8)
 To power complex AI workflows, tasks can now be configured with advanced orchestration parameters:
 
 * **`auto_dedupe` (`bool`)**: If set to `true`, the daemon computes a cryptographic hash of the `task_type` and `task_data`. If an identical payload is currently sitting in the queue pending execution, this new task is silently dropped. Excellent for preventing duplicate generative AI requests from trigger-happy users!
@@ -90,7 +90,7 @@ If a webhook task permanently fails (reaches `max_retries`), the Dead Letter Que
 ## ⚡ Architecture (Zero Networking)
 
 <div align="center">
-  <img src="./assets/architecture.gif" alt="SnerdMQ v0.2.7 Architecture" />
+  <img src="./assets/architecture.gif" alt="SnerdMQ v0.2.8 Architecture" />
   <br/>
   <i>Zero-latency embedded queue orchestration featuring Real-Time Tracking</i>
 </div>
