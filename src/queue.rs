@@ -2,7 +2,7 @@ use chrono::Utc;
 use std::collections::{HashMap, HashSet, BinaryHeap};
 use tokio::sync::Semaphore;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
 use crate::file_store::FileStore;
@@ -20,9 +20,21 @@ pub type MaxRetryHandler = Arc<
     dyn Fn(RetryableTask) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>> + Send + Sync,
 >;
 
+/// How long a completed task id stays in `completed_tasks` before eviction.
+/// It is only a safety net against duplicate execution within a short window;
+/// the tombstone in the task log is the durable source of truth.
+const COMPLETED_TTL: Duration = Duration::from_secs(60);
+/// How often the sweeper evicts expired completed entries.
+const COMPLETED_SWEEP_INTERVAL: Duration = Duration::from_secs(30);
+
 struct ExecutingGuard {
     executing_tasks: Arc<Mutex<HashSet<String>>>,
     task_id: String,
+}
+
+/// Drops completed entries whose completion time is older than `now - ttl`.
+fn evict_expired_completed(completed: &mut HashMap<String, Instant>, now: Instant, ttl: Duration) {
+    completed.retain(|_, completed_at| now.duration_since(*completed_at) < ttl);
 }
 
 impl Drop for ExecutingGuard {
@@ -45,9 +57,10 @@ pub struct SnerdQueue {
     /// Tasks that have been pushed to shared_pq but haven't started executing yet.
     /// Prevents process_due_tasks() from re-adding the same task to the queue.
     queued_tasks: Arc<Mutex<HashSet<String>>>,
-    /// Tasks that have completed execution (successfully or max retries reached).
-    /// Final safety net to prevent duplicate execution.
-    completed_tasks: Arc<Mutex<HashSet<String>>>,
+    /// Tasks that have completed execution (successfully or max retries reached),
+    /// mapped to their completion time. Final safety net to prevent duplicate
+    /// execution; entries are evicted after COMPLETED_TTL to bound memory.
+    completed_tasks: Arc<Mutex<HashMap<String, Instant>>>,
     worker_semaphore: Arc<Semaphore>,
     /// Shared priority queue — workers always pop the highest-priority task next.
     shared_pq: Arc<Mutex<BinaryHeap<PriorityTask>>>,
@@ -77,7 +90,7 @@ impl SnerdQueue {
             active_hashes: Arc::new(Mutex::new(initial_hashes)),
             executing_tasks: Arc::new(Mutex::new(HashSet::new())),
             queued_tasks: Arc::new(Mutex::new(HashSet::new())),
-            completed_tasks: Arc::new(Mutex::new(HashSet::new())),
+            completed_tasks: Arc::new(Mutex::new(HashMap::new())),
             worker_semaphore: Arc::new(Semaphore::new(100)), // Limit to 100 concurrent tasks
             shared_pq: Arc::new(Mutex::new(BinaryHeap::new())),
             dispatcher_count: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
@@ -135,6 +148,20 @@ impl SnerdQueue {
             loop {
                 interval_timer.tick().await;
                 q.process_due_tasks().await;
+            }
+        });
+        self.start_completed_sweeper();
+    }
+
+    /// Periodically evicts completed-task entries older than COMPLETED_TTL so
+    /// the dedup set does not grow unboundedly on long-running daemons.
+    fn start_completed_sweeper(&self) {
+        let completed = Arc::clone(&self.completed_tasks);
+        tokio::spawn(async move {
+            let mut interval_timer = tokio::time::interval(COMPLETED_SWEEP_INTERVAL);
+            loop {
+                interval_timer.tick().await;
+                evict_expired_completed(&mut completed.lock().unwrap(), Instant::now(), COMPLETED_TTL);
             }
         });
     }
@@ -248,7 +275,7 @@ impl SnerdQueue {
         // Final safety check: skip if already completed (prevents duplicate execution)
         {
             let completed = self.completed_tasks.lock().unwrap();
-            if completed.contains(&task.task_id) {
+            if completed.contains_key(&task.task_id) {
                 return; // Already completed, skip
             }
         }
@@ -311,7 +338,7 @@ impl SnerdQueue {
 
                 if !rescheduled {
                     // Mark as completed to prevent duplicate execution
-                    self.completed_tasks.lock().unwrap().insert(task.task_id.clone());
+                    self.completed_tasks.lock().unwrap().insert(task.task_id.clone(), Instant::now());
                     let _ = self.file_store.delete_task(&task.task_id);
                     if let Some(ref hash) = task.payload_hash {
                         if let Ok(mut hashes) = self.active_hashes.lock() {
@@ -356,7 +383,7 @@ impl SnerdQueue {
                     }
 
                     // Mark as completed to prevent duplicate execution
-                    self.completed_tasks.lock().unwrap().insert(task.task_id.clone());
+                    self.completed_tasks.lock().unwrap().insert(task.task_id.clone(), Instant::now());
                     let _ = self.file_store.delete_task(&task.task_id);
                     if let Some(ref hash) = task.payload_hash {
                         if let Ok(mut hashes) = self.active_hashes.lock() {
@@ -366,5 +393,42 @@ impl SnerdQueue {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod completed_eviction_tests {
+    use super::*;
+
+    #[test]
+    fn evicts_entries_older_than_ttl() {
+        let now = Instant::now();
+        let mut completed = HashMap::new();
+        completed.insert("stale".to_string(), now - Duration::from_secs(90));
+        completed.insert("fresh".to_string(), now - Duration::from_secs(10));
+
+        evict_expired_completed(&mut completed, now, COMPLETED_TTL);
+
+        assert!(!completed.contains_key("stale"));
+        assert!(completed.contains_key("fresh"));
+        assert_eq!(completed.len(), 1);
+    }
+
+    #[test]
+    fn keeps_entries_exactly_within_ttl() {
+        let now = Instant::now();
+        let mut completed = HashMap::new();
+        completed.insert("edge".to_string(), now - (COMPLETED_TTL - Duration::from_secs(1)));
+
+        evict_expired_completed(&mut completed, now, COMPLETED_TTL);
+
+        assert!(completed.contains_key("edge"));
+    }
+
+    #[test]
+    fn empty_map_is_noop() {
+        let mut completed: HashMap<String, Instant> = HashMap::new();
+        evict_expired_completed(&mut completed, Instant::now(), COMPLETED_TTL);
+        assert!(completed.is_empty());
     }
 }
